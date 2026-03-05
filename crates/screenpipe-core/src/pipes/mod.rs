@@ -63,7 +63,6 @@ pub struct PipeConfig {
     pub preset: Option<String>,
 
     // -- Data permissions (all optional, backwards compatible) ---------------
-
     /// Only data from these apps reaches the pipe (case-insensitive).
     #[serde(default, alias = "allow-apps", skip_serializing_if = "Vec::is_empty")]
     pub allow_apps: Vec<String>,
@@ -71,16 +70,28 @@ pub struct PipeConfig {
     #[serde(default, alias = "deny-apps", skip_serializing_if = "Vec::is_empty")]
     pub deny_apps: Vec<String>,
     /// Only matching window titles pass (glob patterns, case-insensitive).
-    #[serde(default, alias = "allow-windows", skip_serializing_if = "Vec::is_empty")]
+    #[serde(
+        default,
+        alias = "allow-windows",
+        skip_serializing_if = "Vec::is_empty"
+    )]
     pub allow_windows: Vec<String>,
     /// Matching window titles are blocked (glob, wins over allow).
     #[serde(default, alias = "deny-windows", skip_serializing_if = "Vec::is_empty")]
     pub deny_windows: Vec<String>,
     /// Allowed content types: "ocr", "audio", "input", "accessibility".
-    #[serde(default, alias = "allow-content-types", skip_serializing_if = "Vec::is_empty")]
+    #[serde(
+        default,
+        alias = "allow-content-types",
+        skip_serializing_if = "Vec::is_empty"
+    )]
     pub allow_content_types: Vec<String>,
     /// Blocked content types (wins over allow).
-    #[serde(default, alias = "deny-content-types", skip_serializing_if = "Vec::is_empty")]
+    #[serde(
+        default,
+        alias = "deny-content-types",
+        skip_serializing_if = "Vec::is_empty"
+    )]
     pub deny_content_types: Vec<String>,
     /// Daily time window, e.g. "09:00-17:00". Supports midnight wrap.
     #[serde(default, alias = "time-range", skip_serializing_if = "Option::is_none")]
@@ -92,7 +103,11 @@ pub struct PipeConfig {
     #[serde(default, alias = "allow-raw-sql", skip_serializing_if = "is_false")]
     pub allow_raw_sql: bool,
     /// Whether this pipe can access /frames/* (screenshots). Default: true.
-    #[serde(default = "default_true", alias = "allow-frames", skip_serializing_if = "is_true")]
+    #[serde(
+        default = "default_true",
+        alias = "allow-frames",
+        skip_serializing_if = "is_true"
+    )]
     pub allow_frames: bool,
 
     /// Catches any extra fields from front-matter (backwards compat).
@@ -999,9 +1014,7 @@ impl PipeManager {
                 warn!("failed to pre-configure pi provider: {}", e);
             }
 
-            pipe_token = setup_pipe_permissions(
-                &pipe_dir, &config, self.token_registry.as_ref(),
-            );
+            pipe_token = setup_pipe_permissions(&pipe_dir, &config, self.token_registry.as_ref());
         }
         let token_registry_ref = self.token_registry.clone();
 
@@ -1358,7 +1371,9 @@ impl PipeManager {
             }
 
             pipe_token = setup_pipe_permissions(
-                &self.pipes_dir.join(name), &config, self.token_registry.as_ref(),
+                &self.pipes_dir.join(name),
+                &config,
+                self.token_registry.as_ref(),
             );
         }
 
@@ -1954,7 +1969,9 @@ impl PipeManager {
                         }
 
                         pipe_token = setup_pipe_permissions(
-                            &pipes_dir.join(name), config, token_registry.as_ref(),
+                            &pipes_dir.join(name),
+                            config,
+                            token_registry.as_ref(),
                         );
                     }
 

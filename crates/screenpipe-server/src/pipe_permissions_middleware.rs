@@ -105,9 +105,7 @@ pub async fn pipe_permissions_layer(
                 }
 
                 // Check if audio-related endpoints are blocked
-                if (path.starts_with("/speakers"))
-                    && !perms.is_content_type_allowed("audio")
-                {
+                if (path.starts_with("/speakers")) && !perms.is_content_type_allowed("audio") {
                     return (
                         StatusCode::FORBIDDEN,
                         "audio/speaker access is not permitted for this pipe",

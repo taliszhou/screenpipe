@@ -58,16 +58,8 @@ pub struct PipePermissions {
 impl PipePermissions {
     /// Build resolved permissions from a PipeConfig.
     pub fn from_config(config: &PipeConfig) -> Self {
-        let allow_apps = config
-            .allow_apps
-            .iter()
-            .map(|s| s.to_lowercase())
-            .collect();
-        let deny_apps = config
-            .deny_apps
-            .iter()
-            .map(|s| s.to_lowercase())
-            .collect();
+        let allow_apps = config.allow_apps.iter().map(|s| s.to_lowercase()).collect();
+        let deny_apps = config.deny_apps.iter().map(|s| s.to_lowercase()).collect();
         let allow_windows = config.allow_windows.clone();
         let deny_windows = config.deny_windows.clone();
         let allow_content_types: HashSet<String> =
@@ -121,7 +113,11 @@ impl PipePermissions {
     /// Check if an app name is allowed.
     pub fn is_app_allowed(&self, app_name: &str) -> bool {
         let lower = app_name.to_lowercase();
-        if self.deny_apps.iter().any(|d| lower.contains(d) || d.contains(&lower)) {
+        if self
+            .deny_apps
+            .iter()
+            .any(|d| lower.contains(d) || d.contains(&lower))
+        {
             return false;
         }
         if self.allow_apps.is_empty() {
@@ -217,8 +213,6 @@ impl PipePermissions {
         }
         true
     }
-
-
 }
 
 /// Simple glob matching: `*` matches any sequence, `?` matches any single char.

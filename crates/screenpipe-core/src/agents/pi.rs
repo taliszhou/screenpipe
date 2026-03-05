@@ -144,10 +144,12 @@ impl PiExecutor {
 
         if perms.has_any_restrictions() {
             std::fs::create_dir_all(&ext_dir)?;
-            let ext_content =
-                include_str!("../../assets/extensions/screenpipe-permissions.ts");
+            let ext_content = include_str!("../../assets/extensions/screenpipe-permissions.ts");
             std::fs::write(&ext_path, ext_content)?;
-            debug!("screenpipe-permissions extension installed at {:?}", ext_path);
+            debug!(
+                "screenpipe-permissions extension installed at {:?}",
+                ext_path
+            );
         } else if ext_path.exists() {
             std::fs::remove_file(&ext_path)?;
             info!("screenpipe-permissions extension removed (no restrictions configured)");
@@ -203,10 +205,7 @@ impl PiExecutor {
                 debug!("{} skill installed at {:?}", name, skill_path);
             } else if skill_path.exists() {
                 std::fs::remove_file(&skill_path)?;
-                info!(
-                    "{} skill removed (denied by pipe permissions)",
-                    name
-                );
+                info!("{} skill removed (denied by pipe permissions)", name);
             }
         }
 

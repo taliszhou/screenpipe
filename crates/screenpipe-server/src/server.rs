@@ -139,7 +139,8 @@ pub struct AppState {
     /// when many thumbnails are requested in parallel (e.g., search results).
     pub frame_extraction_semaphore: Arc<tokio::sync::Semaphore>,
     /// Active pipe permission tokens — maps token string to resolved permissions.
-    pub pipe_permissions: Arc<DashMap<String, Arc<screenpipe_core::pipes::permissions::PipePermissions>>>,
+    pub pipe_permissions:
+        Arc<DashMap<String, Arc<screenpipe_core::pipes::permissions::PipePermissions>>>,
     /// Hot frame cache — in-memory cache for today's frames.
     /// Timeline WS reads from here instead of polling the DB.
     pub hot_frame_cache: Arc<HotFrameCache>,
@@ -165,7 +166,8 @@ pub struct SCServer {
     /// Power manager handle — set this before starting to enable /power endpoints.
     pub power_manager: Option<Arc<crate::power::PowerManagerHandle>>,
     /// Shared pipe permission token registry — set before starting so PipeManager can use it.
-    pub pipe_permissions: Arc<DashMap<String, Arc<screenpipe_core::pipes::permissions::PipePermissions>>>,
+    pub pipe_permissions:
+        Arc<DashMap<String, Arc<screenpipe_core::pipes::permissions::PipePermissions>>>,
 }
 
 impl SCServer {
