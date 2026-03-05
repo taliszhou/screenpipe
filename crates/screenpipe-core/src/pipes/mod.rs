@@ -10,6 +10,7 @@
 //! parses configs, runs the scheduler, and delegates execution to an
 //! [`AgentExecutor`].
 
+pub mod permissions;
 pub mod sync;
 
 use crate::agents::{
@@ -60,6 +61,40 @@ pub struct PipeConfig {
     /// When set, overrides `model` and `provider` at runtime.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preset: Option<String>,
+
+    // -- Data permissions (all optional, backwards compatible) ---------------
+
+    /// Only data from these apps reaches the pipe (case-insensitive).
+    #[serde(default, alias = "allow-apps", skip_serializing_if = "Vec::is_empty")]
+    pub allow_apps: Vec<String>,
+    /// Data from these apps is always blocked (wins over allow_apps).
+    #[serde(default, alias = "deny-apps", skip_serializing_if = "Vec::is_empty")]
+    pub deny_apps: Vec<String>,
+    /// Only matching window titles pass (glob patterns, case-insensitive).
+    #[serde(default, alias = "allow-windows", skip_serializing_if = "Vec::is_empty")]
+    pub allow_windows: Vec<String>,
+    /// Matching window titles are blocked (glob, wins over allow).
+    #[serde(default, alias = "deny-windows", skip_serializing_if = "Vec::is_empty")]
+    pub deny_windows: Vec<String>,
+    /// Allowed content types: "ocr", "audio", "input", "accessibility".
+    #[serde(default, alias = "allow-content-types", skip_serializing_if = "Vec::is_empty")]
+    pub allow_content_types: Vec<String>,
+    /// Blocked content types (wins over allow).
+    #[serde(default, alias = "deny-content-types", skip_serializing_if = "Vec::is_empty")]
+    pub deny_content_types: Vec<String>,
+    /// Daily time window, e.g. "09:00-17:00". Supports midnight wrap.
+    #[serde(default, alias = "time-range", skip_serializing_if = "Option::is_none")]
+    pub time_range: Option<String>,
+    /// Allowed days, e.g. "Mon,Tue,Wed,Thu,Fri".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub days: Option<String>,
+    /// Whether this pipe can use /raw_sql. Default: false.
+    #[serde(default, alias = "allow-raw-sql", skip_serializing_if = "is_false")]
+    pub allow_raw_sql: bool,
+    /// Whether this pipe can access /frames/* (screenshots). Default: true.
+    #[serde(default = "default_true", alias = "allow-frames", skip_serializing_if = "is_true")]
+    pub allow_frames: bool,
+
     /// Catches any extra fields from front-matter (backwards compat).
     #[serde(default, flatten, skip_serializing_if = "HashMap::is_empty")]
     pub config: HashMap<String, serde_json::Value>,
@@ -82,6 +117,12 @@ fn is_default_agent(s: &String) -> bool {
 }
 fn is_default_model(s: &String) -> bool {
     s == "claude-haiku-4-5" || s == "claude-haiku-4-5@20251001"
+}
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+fn is_true(b: &bool) -> bool {
+    *b
 }
 
 /// Result of a single pipe run.
@@ -881,6 +922,35 @@ impl PipeManager {
             ) {
                 warn!("failed to pre-configure pi provider: {}", e);
             }
+
+            // Install permissions extension and filtered skills
+            if let Err(e) = PiExecutor::ensure_permissions_extension(&pipe_dir, &config) {
+                warn!("failed to install permissions extension: {}", e);
+            }
+            if let Err(e) = PiExecutor::ensure_screenpipe_skill_filtered(&pipe_dir, &config) {
+                warn!("failed to install filtered skills: {}", e);
+            }
+
+            // Write permissions JSON for the extension to read
+            let perms = permissions::PipePermissions::from_config(&config);
+            if perms.has_restrictions() {
+                let perms_path = pipe_dir.join(".screenpipe-permissions.json");
+                match serde_json::to_string(&perms) {
+                    Ok(json) => {
+                        if let Err(e) = std::fs::write(&perms_path, &json) {
+                            warn!("failed to write permissions file: {}", e);
+                        }
+                        // Also set env var for the subprocess
+                        std::env::set_var("SCREENPIPE_PIPE_PERMISSIONS", &json);
+                    }
+                    Err(e) => warn!("failed to serialize permissions: {}", e),
+                }
+            } else {
+                // Clean up any stale permissions file
+                let perms_path = pipe_dir.join(".screenpipe-permissions.json");
+                let _ = std::fs::remove_file(&perms_path);
+                std::env::remove_var("SCREENPIPE_PIPE_PERMISSIONS");
+            }
         }
 
         // Clone everything needed for the background task
@@ -1227,6 +1297,28 @@ impl PipeManager {
                 run_provider_url.as_deref(),
             ) {
                 warn!("failed to pre-configure pi provider: {}", e);
+            }
+
+            // Install permissions extension and filtered skills
+            let pipe_dir_for_perms = self.pipes_dir.join(name);
+            if let Err(e) = PiExecutor::ensure_permissions_extension(&pipe_dir_for_perms, &config) {
+                warn!("failed to install permissions extension: {}", e);
+            }
+            if let Err(e) = PiExecutor::ensure_screenpipe_skill_filtered(&pipe_dir_for_perms, &config) {
+                warn!("failed to install filtered skills: {}", e);
+            }
+
+            // Write permissions JSON for the extension to read
+            let perms = permissions::PipePermissions::from_config(&config);
+            if perms.has_restrictions() {
+                let perms_path = pipe_dir_for_perms.join(".screenpipe-permissions.json");
+                if let Ok(json) = serde_json::to_string(&perms) {
+                    let _ = std::fs::write(&perms_path, &json);
+                    std::env::set_var("SCREENPIPE_PIPE_PERMISSIONS", &json);
+                }
+            } else {
+                let _ = std::fs::remove_file(pipe_dir_for_perms.join(".screenpipe-permissions.json"));
+                std::env::remove_var("SCREENPIPE_PIPE_PERMISSIONS");
             }
         }
 
@@ -1812,6 +1904,28 @@ impl PipeManager {
                             provider_url.as_deref(),
                         ) {
                             warn!("scheduler: failed to pre-configure pi provider: {}", e);
+                        }
+
+                        // Install permissions extension and filtered skills
+                        let sched_pipe_dir = pipes_dir.join(name);
+                        if let Err(e) = PiExecutor::ensure_permissions_extension(&sched_pipe_dir, config) {
+                            warn!("scheduler: failed to install permissions extension: {}", e);
+                        }
+                        if let Err(e) = PiExecutor::ensure_screenpipe_skill_filtered(&sched_pipe_dir, config) {
+                            warn!("scheduler: failed to install filtered skills: {}", e);
+                        }
+
+                        // Write permissions JSON for the extension to read
+                        let perms = permissions::PipePermissions::from_config(config);
+                        if perms.has_restrictions() {
+                            let perms_path = sched_pipe_dir.join(".screenpipe-permissions.json");
+                            if let Ok(json) = serde_json::to_string(&perms) {
+                                let _ = std::fs::write(&perms_path, &json);
+                                std::env::set_var("SCREENPIPE_PIPE_PERMISSIONS", &json);
+                            }
+                        } else {
+                            let _ = std::fs::remove_file(sched_pipe_dir.join(".screenpipe-permissions.json"));
+                            std::env::remove_var("SCREENPIPE_PIPE_PERMISSIONS");
                         }
                     }
 
@@ -2593,6 +2707,16 @@ mod tests {
             model: "claude-haiku-4-5".to_string(),
             provider: None,
             preset: Some("default".to_string()),
+            allow_apps: vec![],
+            deny_apps: vec![],
+            allow_windows: vec![],
+            deny_windows: vec![],
+            allow_content_types: vec![],
+            deny_content_types: vec![],
+            time_range: None,
+            days: None,
+            allow_raw_sql: false,
+            allow_frames: true,
             config: HashMap::new(),
         };
         let body = "Do something useful";
@@ -2677,6 +2801,16 @@ mod tests {
             model: "test-model".to_string(),
             provider: None,
             preset: None,
+            allow_apps: vec![],
+            deny_apps: vec![],
+            allow_windows: vec![],
+            deny_windows: vec![],
+            allow_content_types: vec![],
+            deny_content_types: vec![],
+            time_range: None,
+            days: None,
+            allow_raw_sql: false,
+            allow_frames: true,
             config: HashMap::new(),
         };
         let prompt = render_prompt_with_port(&config, "body text", 3031, None);
@@ -2695,6 +2829,16 @@ mod tests {
             model: "test-model".to_string(),
             provider: None,
             preset: None,
+            allow_apps: vec![],
+            deny_apps: vec![],
+            allow_windows: vec![],
+            deny_windows: vec![],
+            allow_content_types: vec![],
+            deny_content_types: vec![],
+            time_range: None,
+            days: None,
+            allow_raw_sql: false,
+            allow_frames: true,
             config: HashMap::new(),
         };
         let prompt = render_prompt_with_port(&config, "hello", 3030, None);
@@ -2711,6 +2855,16 @@ mod tests {
             model: "test-model".to_string(),
             provider: None,
             preset: None,
+            allow_apps: vec![],
+            deny_apps: vec![],
+            allow_windows: vec![],
+            deny_windows: vec![],
+            allow_content_types: vec![],
+            deny_content_types: vec![],
+            time_range: None,
+            days: None,
+            allow_raw_sql: false,
+            allow_frames: true,
             config: HashMap::new(),
         };
         let prompt = render_prompt_with_port(
@@ -2734,6 +2888,16 @@ mod tests {
             model: "test-model".to_string(),
             provider: None,
             preset: None,
+            allow_apps: vec![],
+            deny_apps: vec![],
+            allow_windows: vec![],
+            deny_windows: vec![],
+            allow_content_types: vec![],
+            deny_content_types: vec![],
+            time_range: None,
+            days: None,
+            allow_raw_sql: false,
+            allow_frames: true,
             config: HashMap::new(),
         };
         let prompt = render_prompt_with_port(&config, "body text", 3030, None);
@@ -2797,6 +2961,16 @@ mod tests {
                 model: "test".to_string(),
                 provider: None,
                 preset: None,
+                allow_apps: vec![],
+                deny_apps: vec![],
+                allow_windows: vec![],
+                deny_windows: vec![],
+                allow_content_types: vec![],
+                deny_content_types: vec![],
+                time_range: None,
+                days: None,
+                allow_raw_sql: false,
+                allow_frames: true,
                 config: HashMap::new(),
             },
             last_run: None,

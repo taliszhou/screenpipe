@@ -131,6 +131,88 @@ impl PiExecutor {
         Ok(())
     }
 
+    /// Install or remove the screenpipe-permissions extension based on config.
+    /// Only installed when the pipe has data permission restrictions.
+    pub fn ensure_permissions_extension(
+        project_dir: &Path,
+        config: &crate::pipes::PipeConfig,
+    ) -> Result<()> {
+        use crate::pipes::permissions::PipePermissions;
+        let perms = PipePermissions::from_config(config);
+        let ext_dir = project_dir.join(".pi").join("extensions");
+        let ext_path = ext_dir.join("screenpipe-permissions.ts");
+
+        if perms.has_restrictions() {
+            std::fs::create_dir_all(&ext_dir)?;
+            let ext_content =
+                include_str!("../../assets/extensions/screenpipe-permissions.ts");
+            std::fs::write(&ext_path, ext_content)?;
+            debug!("screenpipe-permissions extension installed at {:?}", ext_path);
+        } else if ext_path.exists() {
+            std::fs::remove_file(&ext_path)?;
+            info!("screenpipe-permissions extension removed (no restrictions configured)");
+        }
+
+        Ok(())
+    }
+
+    /// Conditionally install skills based on pipe permissions.
+    /// Skills that teach endpoints the pipe can't access are skipped.
+    pub fn ensure_screenpipe_skill_filtered(
+        project_dir: &Path,
+        config: &crate::pipes::PipeConfig,
+    ) -> Result<()> {
+        use crate::pipes::permissions::PipePermissions;
+        let perms = PipePermissions::from_config(config);
+
+        let all_skills: &[(&str, &str, Box<dyn Fn(&PipePermissions) -> bool>)] = &[
+            (
+                "screenpipe-search",
+                include_str!("../../assets/skills/screenpipe-search/SKILL.md"),
+                Box::new(|_| true), // always installed
+            ),
+            (
+                "screenpipe-media",
+                include_str!("../../assets/skills/screenpipe-media/SKILL.md"),
+                Box::new(|p: &PipePermissions| p.allow_frames),
+            ),
+            (
+                "screenpipe-retranscribe",
+                include_str!("../../assets/skills/screenpipe-retranscribe/SKILL.md"),
+                Box::new(|p: &PipePermissions| p.is_content_type_allowed("audio")),
+            ),
+            (
+                "screenpipe-analytics",
+                include_str!("../../assets/skills/screenpipe-analytics/SKILL.md"),
+                Box::new(|p: &PipePermissions| p.allow_raw_sql),
+            ),
+            (
+                "screenpipe-elements",
+                include_str!("../../assets/skills/screenpipe-elements/SKILL.md"),
+                Box::new(|p: &PipePermissions| p.is_content_type_allowed("accessibility")),
+            ),
+        ];
+
+        for (name, content, should_install) in all_skills {
+            let skill_dir = project_dir.join(".pi").join("skills").join(name);
+            let skill_path = skill_dir.join("SKILL.md");
+
+            if should_install(&perms) {
+                std::fs::create_dir_all(&skill_dir)?;
+                std::fs::write(&skill_path, content)?;
+                debug!("{} skill installed at {:?}", name, skill_path);
+            } else if skill_path.exists() {
+                std::fs::remove_file(&skill_path)?;
+                info!(
+                    "{} skill removed (denied by pipe permissions)",
+                    name
+                );
+            }
+        }
+
+        Ok(())
+    }
+
     /// Install or remove the web-search extension based on provider.
     /// Web search uses the screenpipe cloud backend, so we only enable it
     /// for screenpipe-cloud to avoid sending data to our backend when the
