@@ -65,6 +65,7 @@ commits that broke this area: `0752ea59`, `7562ec62`, `2a2bd9b5`, `f2f7f770`, `5
 
 - [ ] **dock icon visible on launch** — app icon appears in dock immediately on startup.
 - [ ] **tray icon visible on launch** — tray icon appears in menu bar on startup.
+- [ ] **Windows tray left-click** — (Windows) Left-clicking the tray icon opens the main app window. (`8e39aaa3`)
 - [ ] **dock icon persists after overlay show/hide** — show and hide overlay 5 times. dock icon must remain visible every time. was broken by Accessory mode switches.
 - [ ] **tray icon persists after overlay show/hide** — same test. tray icon must remain visible.
 - [ ] **dock right-click menu works** — right-click dock icon. "Show screenpipe", "Settings", "Check for updates" all work (`d794176a`).
@@ -75,6 +76,7 @@ commits that broke this area: `0752ea59`, `7562ec62`, `2a2bd9b5`, `f2f7f770`, `5
 - [ ] **no autosave_name crash** — removed in `2a2bd9b5`. objc2→objc pointer cast was causing `panic_cannot_unwind`.
 - [ ] **no recreate_tray** — recreating tray pushes icon LEFT (behind notch). must only create once (`f2f7f770`).
 - [ ] **tray upgrade button opens in-app checkout** — Verify that clicking the tray's upgrade button correctly opens the in-app checkout experience. (`078fcfb2`)
+- [ ] **add "Skip onboarding" to tray menu** — During onboarding, verify that "Skip onboarding" is available in the tray menu. (`ab21cb73`)
 - [ ] **modernized tray menu** — Verify the tray menu's updated layout and functionality match the modernized design. (`b6c363e5`)
 
 ### 3. monitor plug/unplug
@@ -100,6 +102,8 @@ commits: `28e5c247`
 - [ ] **no audio device available** — unplug all audio. app continues (vision still works). log shows warning, not crash.
 - [ ] **audio stream timeout recovery** — if audio stream times out (30s no data), it should reconnect automatically.
 - [ ] **multiple audio devices simultaneously** — input (mic) + output (speakers) both recording. both show in device list.
+- [ ] **per-device audio levels** — Verify that per-device audio levels can be configured and are respected in recording settings. (`ec4d998a`)
+- [ ] **use capture timestamp for storage** — Verify that audio chunks are named and stored in the database using the capture timestamp, not the time of processing. (`f0ffd151`)
 - [ ] **disable audio setting** — toggling "disable audio" stops all audio recording. re-enabling restarts it.
 - [ ] **Metal GPU for whisper** — transcription uses GPU acceleration on macOS (`f882caef`). verify with Activity Monitor GPU tab.
 - [ ] **Batch transcription mode** — Verify that batch transcription mode works correctly with both cloud and Deepgram engines.
@@ -222,7 +226,7 @@ commits: `94531265`, `d794176a`, `9070639c`, `0378cab1`, `4a3313d3`, `7ffdd4f1`,
 
 ### 9. database & storage
 
-commits: `eea0c865`, `cc09de61`, `e61501da`, `d25191d7`, `60096fb9`
+commits: `eea0c865`, `cc09de61`, `e61501da`, `d25191d7`, `60096fb9`, `48c0655f`, `d458c71f`, `dc2145b3`
 
 - [ ] **slow DB insert warning** — check logs. "Slow DB batch insert" warnings should be <1s in normal operation. >3s indicates contention.
 - [ ] **concurrent DB access** — UI queries + recording inserts happening simultaneously. no "database is locked" errors.
@@ -231,6 +235,8 @@ commits: `eea0c865`, `cc09de61`, `e61501da`, `d25191d7`, `60096fb9`
 - [ ] **UTF-8 boundary panic** — search with special characters, non-ASCII text in OCR results. no panic on string slicing (`eea0c865`).
 - [ ] **low disk space** — with <1GB free, app should warn user. no crash from failed writes.
 - [ ] **large database (>10GB)** — search still returns results within 2 seconds. app doesn't freeze on startup.
+- [ ] **snapshot compaction (JPEG→MP4)** — Verify that background snapshot compaction from JPEG to MP4 works correctly, saving disk space without data loss. (`dc2145b3`)
+- [ ] **file-based chat storage** — Verify that chat history is stored as individual JSON files in `~/.screenpipe/chats/`. (`48c0655f`, `d458c71f`)
 - [ ] **Audio chunk timestamps** — `start_time` and `end_time` are correctly set for reconciled and retranscribed audio chunks in the database.
 - [ ] **DB pool starvation prevention** — Simulate high database load (e.g., rapid screen activity, many pipes running) and monitor logs. Verify no "database is locked" errors or signs of DB pool starvation.
 - [ ] **Multi-byte window titles in suggestions** — Interact with suggestions for windows that have multi-byte (e.g., Unicode, emoji) characters in their titles. Verify no char boundary panics.
@@ -238,15 +244,6 @@ commits: `eea0c865`, `cc09de61`, `e61501da`, `d25191d7`, `60096fb9`
 - [ ] **pipe_config blobs skipped in sync** — Verify that `pipe_config` blobs are correctly skipped during synchronization, preventing unnecessary data transfer and potential issues. (`08d5c53a`)
 - [ ] **Pi's native auto-compaction for pipe session history** — Verify that Pi's native auto-compaction feature for pipe session history works as expected, preventing indefinite growth of history and maintaining performance. (`8f49e2cf`)
 - [ ] **UTF-8 panic with long multi-byte strings** — Introduce long strings with multi-byte UTF-8 characters (e.g., in window titles, chat input, search queries). Verify no panics occur when these strings are truncated, stored, or processed.
-
-- [ ] **slow DB insert warning** — check logs. "Slow DB batch insert" warnings should be <1s in normal operation. >3s indicates contention.
-- [ ] **concurrent DB access** — UI queries + recording inserts happening simultaneously. no "database is locked" errors.
-- [ ] **store race condition** — rapidly toggle settings while recording is active. no crash (`eea0c865`).
-- [ ] **event listener race condition** — Tauri event listener setup during rapid window creation. no crash (`cc09de61`).
-- [ ] **UTF-8 boundary panic** — search with special characters, non-ASCII text in OCR results. no panic on string slicing (`eea0c865`).
-- [ ] **low disk space** — with <1GB free, app should warn user. no crash from failed writes.
-- [ ] **large database (>10GB)** — search still returns results within 2 seconds. app doesn't freeze on startup.
-- [ ] **Audio chunk timestamps** — `start_time` and `end_time` are correctly set for reconciled and retranscribed audio chunks in the database.
 
 ### 10. AI presets & settings
 
@@ -267,17 +264,6 @@ commits: `8a5f51dd`, `0b0d8090`, `7e58564e`, `2522a7e2`, `f3e55dbc`, `79f2913f`
 - [ ] **Credit balance in billing UI and errors** — Verify that the billing UI accurately displays the credit balance and clearly differentiates between `credits_exhausted` and other LLM-related errors.
 - [ ] **Unknown AI provider type sanitization** — Configure a malformed or unknown AI provider type (e.g., by manual config edit). Verify the app doesn't crash on startup or when navigating to settings, and gracefully handles the unknown type.
 
-commits: `8a5f51dd`, `0b0d8090`
-
-- [ ] **Ollama not running** — creating an Ollama preset shows free-text input fields (not stuck loading). user can type model name manually (`8a5f51dd`).
-- [ ] **custom provider preset** — user can add a custom API endpoint. model name is free-text input with optional autocomplete.
-- [ ] **settings survive restart** — change any setting, quit, relaunch. setting is preserved.
-- [ ] **overlay mode switch** — change from fullscreen to window mode. setting saves. next shortcut press uses new mode.
-- [ ] **FPS setting** — change capture FPS. recording interval changes accordingly.
-- [ ] **language/OCR engine setting** — change OCR language. new language used on next capture cycle.
-- [ ] **video quality setting** — low/balanced/high/max. affects FFmpeg encoding params (`21bddd0f`).
-- [ ] **Settings UI sentence case** — All settings UI elements (billing, pipes, team) should use consistent sentence case.
-
 ### 11. onboarding
 
 commits: `87abb00d`, `9464fdc9`, `0f9e43aa`, `7ea15f32`, `bf1f1004`
@@ -290,18 +276,9 @@ commits: `87abb00d`, `9464fdc9`, `0f9e43aa`, `7ea15f32`, `bf1f1004`
 - [ ] **onboarding doesn't re-show** — after completing onboarding, restart app. main window shows, not onboarding.
 - [ ] **First-run 2-hour reminder notification** — On a fresh install, verify that a custom notification panel appears after approximately 2 hours as a first-run reminder.
 
-commits: `87abb00d`, `9464fdc9`, `0f9e43aa`, `7ea15f32`
-
-- [ ] **fresh install flow** — onboarding appears, permissions requested, user completes setup.
-- [ ] **auto-advance after engine starts** — status screen advances automatically after 15-20 seconds once engine is running (`87abb00d`, `9464fdc9`).
-- [ ] **skip onboarding** — user can skip and get to main app. settings use defaults.
-- [ ] **shortcut gate** — onboarding teaches the shortcut. user must press it to proceed (`0f9e43aa`).
-- [ ] **onboarding window size** — window is correctly sized, no overflow (`7ea15f32`).
-- [ ] **onboarding doesn't re-show** — after completing onboarding, restart app. main window shows, not onboarding.
-
 ### 12. timeline & search
 
-commits: `f1255eac`, `25cbdc6b`, `2529367d`, `d9821624`, `e61501da`, `039d5fea`, `50ff4f4c`, `91cc4371`
+commits: `f1255eac`, `25cbdc6b`, `2529367d`, `d9821624`, `e61501da`, `039d5fea`, `50ff4f4c`, `91cc4371`, `513d864f`, `ec4d998a`, `b2cbf20e`
 
 - [ ] **arrow key navigation** — left/right arrow keys navigate timeline frames (`f1255eac`).
 - [ ] **search results sorted by time** — search results appear in chronological order (`25cbdc6b`).
@@ -314,6 +291,9 @@ commits: `f1255eac`, `25cbdc6b`, `2529367d`, `d9821624`, `e61501da`, `039d5fea`,
 - [ ] **Keyword search accessibility** — Keyword search should find content within accessibility-only frames and utilize `frames_fts` for comprehensive accessibility text searching.
 - [ ] **Keyword search logic** — Verify that keyword search SQL correctly uses `OR` instead of `UNION` within `IN()`.
 - [ ] **Search prompt accuracy** — Verify that search prompts are improved to prevent false negatives from over-filtering.
+- [ ] **metadata-only FTS filters** — Verify that searching with metadata-only filters (e.g. `app_name` without `q`) returns correct results and accurate search count. (`513d864f`)
+- [ ] **timeline play button reliability** — Verify that the timeline play button shows more reliably when audio exists nearby. (`ec4d998a`)
+- [ ] **"recording off" indicator** — Verify that "recording off" is shown on the timeline when recording is disabled. (`b2cbf20e`)
 - [ ] **Past-day timeline navigation** — Navigate the timeline to past days (e.g., using date picker or arrow keys). Verify that data loads correctly and the timeline behaves as expected.
 - [ ] **`content_type=all` search and pagination** — Perform search queries with `content_type=all`. Verify that the result count is accurate and pagination works correctly without missing or duplicating results.
 - [ ] **Search pagination with offset** — Perform paginated searches, particularly beyond the first page. Verify that results are not empty or incorrect due to double-applied offsets.
@@ -330,20 +310,6 @@ commits: `f1255eac`, `25cbdc6b`, `2529367d`, `d9821624`, `e61501da`, `039d5fea`,
 - [ ] **Text selection not blocked by URL overlays** — On URL-heavy pages, verify that text selection is not blocked by clickable URL overlays.
 - [ ] **AI suggestion chip refresh and animations** — Verify a refresh button exists on AI suggestion chips, and appropriate animations (e.g., loading spinner) are shown when refreshing.
 - [ ] **Activity summary time measurement and relative parsing** — Verify activity summaries display accurate time measurements and relative time parsing (e.g., "5 minutes ago", "yesterday") works correctly in the UI.
-
-commits: `f1255eac`, `25cbdc6b`, `2529367d`, `d9821624`
-
-- [ ] **arrow key navigation** — left/right arrow keys navigate timeline frames (`f1255eac`).
-- [ ] **search results sorted by time** — search results appear in chronological order (`25cbdc6b`).
-- [ ] **no frame clearing during navigation** — navigating timeline doesn't cause frames to disappear and reload (`2529367d`).
-- [ ] **URL detection in frames** — URLs visible in screenshots are extracted and shown as clickable pills (`50ef52d1`, `aa992146`).
-- [ ] **app context popover** — clicking app icon in timeline shows context (time, windows, urls, audio) (`be3ecffb`).
-- [ ] **daily summary in timeline** — Apple Intelligence summary shows in timeline, compact when no summary (`d9821624`).
-- [ ] **window-focused refresh** — opening app via shortcut/tray refreshes timeline data immediately (`0b057046`).
-- [ ] **frame deep link navigation** — `screenpipe://frame/N` or `screenpipe://frames/N` opens main window and jumps to frame N. works from cold start; invalid IDs show clear error.
-- [ ] **Keyword search accessibility** — Keyword search should find content within accessibility-only frames and utilize `frames_fts` for comprehensive accessibility text searching.
-- [ ] **Keyword search logic** — Verify that keyword search SQL correctly uses `OR` instead of `UNION` within `IN()`.
-- [ ] **Search prompt accuracy** — Verify that search prompts are improved to prevent false negatives from over-filtering.
 
 ### 13. sync & cloud
 
@@ -368,14 +334,16 @@ commits: `b3628788`, `738178da`
 
 ### 15. Windows-specific
 
-commits: `eea0c865`, `fe9060db`, `c99c3967`, `aeaa446b`, `5a219688`, `caae1ebc`, `67caf1d1`, `ff4af7b5`
+commits: `eea0c865`, `fe9060db`, `c99c3967`, `aeaa446b`, `5a219688`, `caae1ebc`, `67caf1d1`, `ff4af7b5`, `892c6c54`, `e1fdd2fd`, `3b549c90`, `8e39aaa3`
 
 - [ ] **COM thread conflict** — audio and vision threads don't conflict on COM initialization (`eea0c865`).
 - [ ] **high-DPI display (150%, 200%)** — OCR captures at correct resolution.
 - [ ] **multiple monitors** — all detected and recorded.
 - [ ] **Windows Defender** — app not blocked by default security.
 - [ ] **Windows default mode** — On Windows, the app should default to window mode on first launch.
-- [ ] **Windows taskbar icon** — The app should display a taskbar icon on Windows.
+- [ ] **Windows taskbar icon** — (Windows) Screenpipe icon is always visible in the taskbar in both modes. (`e1fdd2fd`)
+- [ ] **Windows tray left-click** — (Windows) Left-clicking the tray icon opens the main app window. (`8e39aaa3`)
+- [ ] **Windows PortableGit auto-download** — (Windows) PortableGit is automatically downloaded if missing, which is required for AI chat bash features. (`892c6c54`)
 - [ ] **Windows audio transcription accuracy** — On Windows, verify improved audio transcription accuracy due to native Silero VAD frame size and lower speech threshold.
 - [ ] **Windows multi-line pipe prompts** — Multi-line pipe prompts should be preserved on Windows.
 - [ ] **Alt+S shortcut activates overlay with keyboard focus** — On Windows, press `Alt+S`. Verify that the overlay window appears and immediately receives keyboard focus, allowing immediate typing.
@@ -384,17 +352,6 @@ commits: `eea0c865`, `fe9060db`, `c99c3967`, `aeaa446b`, `5a219688`, `caae1ebc`,
 - [ ] **capture full accessibility tree for Chromium/Electron apps on Windows** — On Windows, verify that the full accessibility tree is captured for Chromium/Electron applications. (`2e50c772`)
 - [ ] **Accessibility tree bounds for text overlay** — On Windows, verify that text overlays accurately reflect the accessibility tree bounds, making selection and interaction precise.
 - [ ] **Filter noisy system apps** — On Windows, verify that noisy system apps are filtered out from screen capture and do not appear in the timeline or search results.
-
-commits: `eea0c865`, `fe9060db`, `c99c3967`, `aeaa446b`, `5a219688`, `caae1ebc`, `67caf1d1`
-
-- [ ] **COM thread conflict** — audio and vision threads don't conflict on COM initialization (`eea0c865`).
-- [ ] **high-DPI display (150%, 200%)** — OCR captures at correct resolution.
-- [ ] **multiple monitors** — all detected and recorded.
-- [ ] **Windows Defender** — app not blocked by default security.
-- [ ] **Windows default mode** — On Windows, the app should default to window mode on first launch.
-- [ ] **Windows taskbar icon** — The app should display a taskbar icon on Windows.
-- [ ] **Windows audio transcription accuracy** — On Windows, verify improved audio transcription accuracy due to native Silero VAD frame size and lower speech threshold.
-- [ ] **Windows multi-line pipe prompts** — Multi-line pipe prompts should be preserved on Windows.
 
 #### Windows text extraction matrix (accessibility vs OCR)
 
@@ -536,11 +493,13 @@ commits: `8c8c445c`
 
 ### 17. AI Agents / Pipes
 
-commits: `fa887407`, `815f52e6`, `60840155`, `e66c3ff8`, `c905ffbf`, `01147096`, `5908d7f4`, `46422869`, `4f43da70`, `71a1a537`, `6abaaa36`, `f3e55dbc`, `8e426dec`, `1289f51e`, `4bc9ff1a`, `c336f73d`, `2f7416ae`
+commits: `fa887407`, `815f52e6`, `60840155`, `e66c3ff8`, `c905ffbf`, `01147096`, `5908d7f4`, `46422869`, `4f43da70`, `71a1a537`, `6abaaa36`, `f3e55dbc`, `8e426dec`, `1289f51e`, `4bc9ff1a`, `c336f73d`, `2f7416ae`, `42cf26eb`, `071a1a8d`
 
 - [ ] **Pi process stability** — After app launch, `ps aux | grep pi` should show a single, stable `pi` process that doesn't restart or get killed.
 - [ ] **Pi readiness handshake** — First chat interaction with Pi should be fast (<2s for readiness).
 - [ ] **Pi auto-recovery** — If the `pi` process is manually killed, it should restart automatically within a few seconds and be ready for chat.
+- [ ] **Pipe data permissions** — Verify that pipes respect data permissions defined via YAML frontmatter. (`42cf26eb`)
+- [ ] **Pipe sharing via deep links** — Verify that pipe sharing via deep links and shareable web pages works correctly. (`071a1a8d`)
 - [ ] **Pipe output accuracy** — When executing a pipe, the user's prompt should be accurately reflected in the output.
 - [ ] **Silent LLM errors** — LLM errors during pipe execution should be displayed to the user, not silently suppressed.
 - [ ] **Fast first chat with Pi** — The first interaction with Pi after app launch should be responsive, with no noticeable delay (aim for <2s).
@@ -567,26 +526,6 @@ commits: `fa887407`, `815f52e6`, `60840155`, `e66c3ff8`, `c905ffbf`, `01147096`,
 - [ ] **Reduced excessive Pi restarts** — When changing AI preset values or other settings, verify that excessive Pi restarts are reduced. Monitor logs for unnecessary restart messages.
 - [ ] **Invalid UTF-8 in Pi streaming** — Execute a pipe that outputs invalid UTF-8 characters to stdout/stderr. Verify that Pi streaming correctly handles these without crashing or displaying garbled output.
 
-commits: `fa887407`, `815f52e6`, `60840155`, `e66c3ff8`, `c905ffbf`, `01147096`, `5908d7f4`, `46422869`, `4f43da70`, `71a1a537`, `6abaaa36`
-
-- [ ] **Pi process stability** — After app launch, `ps aux | grep pi` should show a single, stable `pi` process that doesn't restart or get killed.
-- [ ] **Pi readiness handshake** — First chat interaction with Pi should be fast (<2s for readiness).
-- [ ] **Pi auto-recovery** — If the `pi` process is manually killed, it should restart automatically within a few seconds and be ready for chat.
-- [ ] **Pipe output accuracy** — When executing a pipe, the user's prompt should be accurately reflected in the output.
-- [ ] **Silent LLM errors** — LLM errors during pipe execution should be displayed to the user, not silently suppressed.
-- [ ] **Fast first chat with Pi** — The first interaction with Pi after app launch should be responsive, with no noticeable delay (aim for <2s).
-- [ ] **Activity Summary tool** — MCP can access activity summaries via the `activity-summary` tool, and the `activity-summary` endpoint works correctly.
-- [ ] **Search Elements tool** — MCP can search elements using the `search-elements` tool.
-- [ ] **Frame Context tool** — MCP can access frame context via the `frame-context` tool.
-- [ ] **Progressive disclosure for AI data** — AI data querying should progressively disclose information.
-- [ ] **Screenpipe Analytics skill** — The `screenpipe-analytics` skill can be used by the Pi agent to perform raw SQL usage analytics.
-- [ ] **Screenpipe Retranscribe skill** — The `screenpipe-retranscribe` skill can be used by the Pi agent for retranscription.
-- [ ] **AI preset save stability** — Saving AI presets should not cause crashes, especially when dealing with pipe session conflicts.
-- [ ] **Pipe token handling** — Ensure that Pi configuration for pipes uses the actual token value, not the environment variable name.
-- [ ] **Pipe user_token passthrough** — Verify that the `user_token` is correctly passed to Pi pre-configuration so pipes use the screenpipe provider.
-- [ ] **Default AI model ID** — Verify that the default AI model ID does not contain outdated date suffixes.
-- [ ] **Move provider/model flags** — `--provider` and `--model` flags should be correctly moved before `-p prompt` in `pi spawn` commands.
-
 ### 18. Admin / Team features
 
 commits: `58460e02`, `853e0975`
@@ -594,11 +533,14 @@ commits: `58460e02`, `853e0975`
 - [ ] **Admin team-shared filters** — Admins should be able to remove individual team-shared filters.
 - [ ] **Per-request AI cost tracking and admin spend endpoint** — Verify that per-request AI costs are tracked correctly and that the admin spend endpoint provides accurate usage data.
 
-commits: `58460e02`
+### 19. Enterprise Edition (EE)
 
-- [ ] **Admin team-shared filters** — Admins should be able to remove individual team-shared filters.
+commits: `b680962f`, `9a60ae8f`
 
-### 19. Logging
+- [ ] **hide consumer UI** — In enterprise builds, verify that consumer-facing UI elements (login, account, referral, upsells) are hidden. (`b680962f`)
+- [ ] **enterprise license validation** — Verify that enterprise license keys are correctly validated and stored. (`9a60ae8f`)
+
+### 20. Logging
 
 commits: `fc830b43`, `f54d3e0d`
 
@@ -606,75 +548,6 @@ commits: `fc830b43`, `f54d3e0d`
 - [ ] **PII scrubbing** — Ensure that PII (Personally Identifiable Information) is scrubbed from logs.
 - [ ] **Phone regex PII scrubbing** — After generating some PII-containing data (e.g., typing phone numbers), review logs to ensure that the phone regex correctly scrubs PII and does not over-match bare digit sequences.
 
-commits: `fc830b43`
-
-- [ ] **Reduced log noise** — Verify a significant reduction in log noise (~54%).
-- [ ] **PII scrubbing** — Ensure that PII (Personally Identifiable Information) is scrubbed from logs.
-
-## how to run
-
-### before every release
-1. run sections 1-4 completely (90% of regressions)
-2. spot-check sections 5-10
-3. if Apple Intelligence code changed, run section 7
-
-### before merging window/tray/dock changes
-run section 1 and 2 completely. these are the most fragile.
-
-### before merging vision/OCR changes
-run section 3, 5, and 14 (Windows text extraction matrix) completely.
-
-### before merging audio changes
-run section 4 completely.
-
-### before merging AI/Apple Intelligence changes
-run section 7 and 10.
-
-## known limitations (not bugs)
-
-- tray icon on notched MacBooks can end up behind the notch if menu bar is crowded. Cmd+drag to reposition. dock menu is the fallback.
-- macOS only shows permission prompts once (NotDetermined → Denied is permanent). must use System Settings to re-grant.
-- debug builds use ~3-5x more CPU than release builds for vision pipeline.
-- first frame after app launch always triggers OCR (intentional — no previous frame to compare against).
-- chat panel is pre-created hidden at startup so it exists before user presses the shortcut. Creation no longer activates/shows — only the show_existing path does (matching main overlay pattern).
-- shortcut reminder should use `CanJoinAllSpaces` (visible on all Spaces simultaneously). chat and main overlay should use `MoveToActiveSpace` (moved to current Space on show, then flag removed to pin).
-
-## log locations
-
-```
-macOS:   ~/.screenpipe/screenpipe-app.YYYY-MM-DD.log
-Windows: %USERPROFILE%\.screenpipe\screenpipe-app.YYYY-MM-DD.log
-Linux:   ~/.screenpipe/screenpipe-app.YYYY-MM-DD.log
-```
-
-### what to grep for
-
-```bash
-# crashes/errors
-grep -E "panic|SIGABRT|ERROR|error" ~/.screenpipe/screenpipe-app.*.log
-
-# monitor events
-grep -E "Monitor.*disconnect|Monitor.*reconnect|Starting vision" ~/.screenpipe/screenpipe-app.*.log
-
-# frame skip rate (debug level only)
-grep "Hash match" ~/.screenpipe/screenpipe-app.*.log
-
-# queue health
-grep "Queue stats" ~/.screenpipe/screenpipe-app.*.log
-
-# DB contention
-grep "Slow DB" ~/.screenpipe/screenpipe-app.*.log
-
-# audio issues
-grep -E "audio.*timeout|audio.*error|device.*disconnect" ~/.screenpipe/screenpipe-app.*.log
-
-# window/overlay issues
-grep -E "show_existing|panel.*level|Accessory|activation_policy" ~/.screenpipe/screenpipe-app.*.log
-
-# Apple Intelligence
-grep -E "FoundationModels|apple.intelligence|fm_generate" ~/.screenpipe/screenpipe-app.*.log
-```
-
-### 12. mainland china / great firewall
+### 21. mainland china / great firewall
 
 - [ ] **full app functionality behind GFW** — download, onboarding, AI chat, cloud features, and update checks must all work (or degrade gracefully) on networks subject to the Great Firewall.
