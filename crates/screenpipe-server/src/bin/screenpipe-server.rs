@@ -20,13 +20,12 @@ use screenpipe_db::DatabaseManager;
 use screenpipe_vision::monitor::list_monitors;
 use screenpipe_server::{
     analytics,
-    cli::{Cli, CliAudioTranscriptionEngine, Command},
-    cli_audio::handle_audio_command,
-    cli_mcp::handle_mcp_command,
-    cli_pipe::handle_pipe_command,
-    cli_status::handle_status_command,
-    cli_sync::{handle_sync_command, start_sync_service},
-    cli_vision::handle_vision_command,
+    cli::{
+        audio::handle_audio_command, mcp::handle_mcp_command, pipe::handle_pipe_command,
+        status::handle_status_command,
+        sync::{handle_sync_command, start_sync_service},
+        vision::handle_vision_command, Cli, CliAudioTranscriptionEngine, Command,
+    },
     hot_frame_cache::HotFrameCache,
     start_meeting_persister, start_meeting_watcher, start_power_manager, start_sleep_monitor,
     start_speaker_identification, start_ui_recording,

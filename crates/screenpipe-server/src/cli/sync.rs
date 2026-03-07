@@ -11,7 +11,7 @@ use screenpipe_core::sync::{
 use screenpipe_db::DatabaseManager;
 use tracing::{debug, error, info};
 
-use crate::cli::{get_or_create_machine_id, OutputFormat, RecordArgs, SyncCommand};
+use super::{get_or_create_machine_id, OutputFormat, RecordArgs, SyncCommand};
 use crate::sync_provider::ScreenpipeSyncProvider;
 
 /// Start the cloud sync service
