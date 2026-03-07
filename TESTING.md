@@ -93,6 +93,7 @@ commits: `28e5c247`
 
 ### 4. audio device handling
 
+- [ ] **per-device audio levels** — Verify that per-device audio levels can be set and are correctly applied during recording.
 - [ ] **default audio device** — with "follow system default", recording uses whatever macOS says is default.
 - [ ] **plug in USB headset** — if set to follow defaults and macOS switches to headset, recording follows.
 - [ ] **unplug USB headset** — recording falls back to built-in mic/speakers. no crash. no 30s timeout errors.
@@ -222,8 +223,13 @@ commits: `94531265`, `d794176a`, `9070639c`, `0378cab1`, `4a3313d3`, `7ffdd4f1`,
 
 ### 9. database & storage
 
-commits: `eea0c865`, `cc09de61`, `e61501da`, `d25191d7`, `60096fb9`
+commits: `eea0c865`, `cc09de61`, `e61501da`, `d25191d7`, `60096fb9`, `92295e04b`, `a76a11fb2`, `c95a0d2c9`, `0f09df29a03`, `dc2145b39`, `48c0655f7`
 
+- [ ] **FTS5 external content mode** — Verify that FTS5 tables (`frames_fts`, `audio_fts`) are using external content mode. Verify that dropping `ui_monitoring` doesn't cause issues.
+- [ ] **snapshot compaction (JPEG -> MP4)** — Verify that background snapshot compaction correctly converts JPEGs to MP4.
+- [ ] **compaction cache eviction** — After compaction deletes JPEGs, verify that `frame_image_cache` and `hot_frame_cache` are updated/evicted to prevent black frames or stale data.
+- [ ] **compaction optimizations** — Verify compaction respects battery skip, pacing, and Windows idle priority.
+- [ ] **file-based chat storage** — Verify that chats are stored in `~/.screenpipe/chats/` and survive app restarts.
 - [ ] **slow DB insert warning** — check logs. "Slow DB batch insert" warnings should be <1s in normal operation. >3s indicates contention.
 - [ ] **concurrent DB access** — UI queries + recording inserts happening simultaneously. no "database is locked" errors.
 - [ ] **store race condition** — rapidly toggle settings while recording is active. no crash (`eea0c865`).
@@ -280,8 +286,9 @@ commits: `8a5f51dd`, `0b0d8090`
 
 ### 11. onboarding
 
-commits: `87abb00d`, `9464fdc9`, `0f9e43aa`, `7ea15f32`, `bf1f1004`
+commits: `87abb00d`, `9464fdc9`, `0f9e43aa`, `7ea15f32`, `bf1f1004`, `ab21cb736`
 
+- [ ] **skip onboarding from tray** — Verify that "Skip onboarding" is available in the tray menu during the onboarding process.
 - [ ] **fresh install flow** — onboarding appears, permissions requested, user completes setup.
 - [ ] **auto-advance after engine starts** — status screen advances automatically after 15-20 seconds once engine is running (`87abb00d`, `9464fdc9`).
 - [ ] **skip onboarding** — user can skip and get to main app. settings use defaults.
@@ -301,8 +308,13 @@ commits: `87abb00d`, `9464fdc9`, `0f9e43aa`, `7ea15f32`
 
 ### 12. timeline & search
 
-commits: `f1255eac`, `25cbdc6b`, `2529367d`, `d9821624`, `e61501da`, `039d5fea`, `50ff4f4c`, `91cc4371`
+commits: `f1255eac`, `25cbdc6b`, `2529367d`, `d9821624`, `e61501da`, `039d5fea`, `50ff4f4c`, `91cc4371`, `f8361cb54`, `1f268f669`, `20392110f`, `d50f8d0fe`, `7097f233a`, `817dbf2e2`
 
+- [ ] **search requires 3+ chars** — Verify that search queries are only triggered when 3 or more characters are entered.
+- [ ] **search debounce (400ms)** — Verify that search queries are debounced by 400ms.
+- [ ] **search modal retry and highlights** — Verify retry logic in search modal and that results have yellow highlights.
+- [ ] **search facets after FTS migration** — Verify that search facets (app, time, etc.) still work correctly after the FTS external content migration.
+- [ ] **faster Live Text** — Verify Live Text has a 150ms debounce and doesn't hide between frames.
 - [ ] **arrow key navigation** — left/right arrow keys navigate timeline frames (`f1255eac`).
 - [ ] **search results sorted by time** — search results appear in chronological order (`25cbdc6b`).
 - [ ] **no frame clearing during navigation** — navigating timeline doesn't cause frames to disappear and reload (`2529367d`).
@@ -347,8 +359,12 @@ commits: `f1255eac`, `25cbdc6b`, `2529367d`, `d9821624`
 
 ### 13. sync & cloud
 
-commits: `2f6b2af5`, `ea7f1f61`, `5cb100ea`
+commits: `2f6b2af5`, `ea7f1f61`, `5cb100ea`, `cbe3cc689`, `45de4f3dc`, `d8d51ff8d`
 
+- [ ] **OpenClaw SFTP path resolution** — Verify that `~` path resolution works for OpenClaw SFTP sync.
+- [ ] **Sync UI cancel button** — Verify that a cancel button exists in the sync UI and correctly stops the sync process.
+- [ ] **Filter out cloud paths** — Verify that `cloud://` paths are filtered out from audio/video queries.
+- [ ] **Exclude dev artifacts in sync** — Verify that `node_modules`, `.git`, and build artifacts are skipped during remote sync.
 - [ ] **auto-remember sync password** — user doesn't have to re-enter password each time (`5cb100ea`).
 - [ ] **auto-download from other devices** — after upload cycle, download new data from paired devices (`2f6b2af5`).
 - [ ] **auto-init doesn't loop** — sync initialization happens once, doesn't repeat endlessly (`ea7f1f61`).
@@ -368,8 +384,12 @@ commits: `b3628788`, `738178da`
 
 ### 15. Windows-specific
 
-commits: `eea0c865`, `fe9060db`, `c99c3967`, `aeaa446b`, `5a219688`, `caae1ebc`, `67caf1d1`, `ff4af7b5`
+commits: `eea0c865`, `fe9060db`, `c99c3967`, `aeaa446b`, `5a219688`, `caae1ebc`, `67caf1d1`, `ff4af7b5`, `92295e030`, `ecb293d82`, `25ebb19ad`, `892c6c540`
 
+- [ ] **taskbar icon and shortcut** — Verify that the taskbar icon and shortcut open the settings/home page instead of the overlay.
+- [ ] **tray left-click** — Verify that left-clicking the tray icon opens the app.
+- [ ] **silent PortableGit extraction** — Verify that PortableGit extraction is silent and doesn't show a progress dialog.
+- [ ] **auto-download PortableGit** — Verify that PortableGit is automatically downloaded on Windows if bash is missing.
 - [ ] **COM thread conflict** — audio and vision threads don't conflict on COM initialization (`eea0c865`).
 - [ ] **high-DPI display (150%, 200%)** — OCR captures at correct resolution.
 - [ ] **multiple monitors** — all detected and recorded.
@@ -536,8 +556,14 @@ commits: `8c8c445c`
 
 ### 17. AI Agents / Pipes
 
-commits: `fa887407`, `815f52e6`, `60840155`, `e66c3ff8`, `c905ffbf`, `01147096`, `5908d7f4`, `46422869`, `4f43da70`, `71a1a537`, `6abaaa36`, `f3e55dbc`, `8e426dec`, `1289f51e`, `4bc9ff1a`, `c336f73d`, `2f7416ae`
+commits: `fa887407`, `815f52e6`, `60840155`, `e66c3ff8`, `c905ffbf`, `01147096`, `5908d7f4`, `46422869`, `4f43da70`, `71a1a537`, `6abaaa36`, `f3e55dbc`, `8e426dec`, `1289f51e`, `4bc9ff1a`, `c336f73d`, `2f7416ae`, `1821c6fbb`, `67ef7ede0`, `3425e13fb`, `5cdfb6270`, `161ee725e`
 
+- [ ] **screenpipe-pipes skill** — Verify that the `screenpipe-pipes` skill works correctly for managing pipes via the CLI.
+- [ ] **AI context engineering** — Verify that improved context engineering leads to better tool selection and fewer wasted turns in AI chat.
+- [ ] **ChatGPT OAuth + Pi** — Verify that ChatGPT OAuth works correctly with the Pi agent integration.
+- [ ] **Unknown pipe tokens** — Verify that the system tolerates unknown pipe tokens.
+- [ ] **GPT-5.4 support** — Verify that GPT-5.4 is available in the AI model list.
+- [ ] **Windows PATH for Pi** — Verify that Windows PATH injection for the Pi agent works correctly (mutable `new_path`).
 - [ ] **Pi process stability** — After app launch, `ps aux | grep pi` should show a single, stable `pi` process that doesn't restart or get killed.
 - [ ] **Pi readiness handshake** — First chat interaction with Pi should be fast (<2s for readiness).
 - [ ] **Pi auto-recovery** — If the `pi` process is manually killed, it should restart automatically within a few seconds and be ready for chat.
@@ -610,6 +636,13 @@ commits: `fc830b43`
 
 - [ ] **Reduced log noise** — Verify a significant reduction in log noise (~54%).
 - [ ] **PII scrubbing** — Ensure that PII (Personally Identifiable Information) is scrubbed from logs.
+
+### 20. CLI
+
+commits: `5f228d5df`
+
+- [ ] **subcommands requirement** — Verify that the `screenpipe` CLI now requires subcommands (e.g., `screenpipe setup` instead of just flags).
+- [ ] **no duplicated flags** — Verify that duplicated flags have been removed from the root command.
 
 ## how to run
 
