@@ -299,6 +299,8 @@ export function UpdateBanner({ className, compact = false }: UpdateBannerProps) 
 
 // Hook to listen for update events from Rust
 export function useUpdateListener() {
+  const { toast } = useToast();
+
   const { setIsVisible, setUpdateInfo, setIsDownloading, setDownloadProgress, setAuthRequired } = useUpdateBanner();
 
   useEffect(() => {
@@ -307,6 +309,7 @@ export function useUpdateListener() {
     let unlistenDownloading: (() => void) | undefined;
     let unlistenProgress: (() => void) | undefined;
     let unlistenAuth: (() => void) | undefined;
+    let unlistenNeedsAdmin: (() => void) | undefined;
 
     const setupListeners = async () => {
       // Listen for download starting (shows banner immediately)
@@ -335,6 +338,16 @@ export function useUpdateListener() {
       });
 
       // Listen for auth-required (user needs to sign in to download update)
+      const unlistenNeedsAdmin = await listen<UpdateInfo>("update-needs-admin", (event) => {
+        toast({
+          title: "Update requires admin privileges",
+          description: `v${event.payload.version} is ready — ask your admin to install it.`,
+          variant: "destructive",
+        });
+        setIsDownloading(false);
+        setDownloadProgress(null);
+      });
+
       unlistenAuth = await listen<AuthRequiredInfo>("update-auth-required", (event) => {
         setAuthRequired(event.payload);
         setIsDownloading(false);
@@ -350,6 +363,7 @@ export function useUpdateListener() {
       unlistenDownloading?.();
       unlistenProgress?.();
       unlistenAuth?.();
+      unlistenNeedsAdmin?.();
     };
   }, [setIsVisible, setUpdateInfo, setIsDownloading, setDownloadProgress, setAuthRequired]);
 }
