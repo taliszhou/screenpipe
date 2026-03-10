@@ -10,6 +10,8 @@ use anyhow::Error;
 use dark_light::Mode;
 use log::{debug, error, info, warn};
 use serde_json;
+use std::sync::OnceLock;
+use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -280,6 +282,34 @@ impl UpdatesManager {
             }
 
             // Download and install on all platforms
+            // Check if we can safely download and install (macOS non-admin users freeze on install #2388)
+            let can_install = is_macos_admin();
+            if !can_install {
+                warn!("skipping auto-update: user is not a macOS admin");
+                let update_version = update.version.clone();
+                let _ = self.app.emit("update-needs-admin", serde_json::json!({
+                    "version": update_version,
+                }));
+                
+                let app_notif = self.app.clone();
+                std::thread::spawn(move || {
+                    if let Err(e) = app_notif
+                        .notification()
+                        .builder()
+                        .title("update available")
+                        .body(format!("v{} is ready — ask your admin to install it", update_version))
+                        .show()
+                    {
+                        error!("failed to send update notification: {}", e);
+                    }
+                });
+                
+                if let Some(ref item) = self.update_menu_item {
+                    let _ = item.set_enabled(true);
+                    let _ = item.set_text("Ask admin to update");
+                }
+                return Ok(true); // Done
+            }
             {
                 #[cfg(target_os = "windows")]
                 {
@@ -632,4 +662,23 @@ pub fn start_update_check(
     });
 
     Ok(updates_manager)
+}
+
+pub fn is_macos_admin() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        static IS_ADMIN: OnceLock<bool> = OnceLock::new();
+        *IS_ADMIN.get_or_init(|| {
+            if let Ok(output) = Command::new("id").arg("-Gn").output() {
+                if let Ok(groups) = String::from_utf8(output.stdout) {
+                    return groups.split_whitespace().any(|g| g == "admin");
+                }
+            }
+            true // fallback to true if we can't tell
+        })
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
 }
