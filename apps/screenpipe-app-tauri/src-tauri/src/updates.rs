@@ -279,6 +279,35 @@ impl UpdatesManager {
                 }
             }
 
+            if !is_macos_admin() {
+                warn!("skipping auto-update: user is not a macOS admin");
+                let _ = self.app.emit(
+                    "update-needs-admin",
+                    serde_json::json!({
+                        "version": update.version
+                    }),
+                );
+
+                let app_notif = self.app.clone();
+                let version_str = update.version.clone();
+                std::thread::spawn(move || {
+                    if let Err(e) = app_notif
+                        .notification()
+                        .builder()
+                        .title("screenpipe update available")
+                        .body(format!(
+                            "update v{} available — ask your admin to install it",
+                            version_str
+                        ))
+                        .show()
+                    {
+                        error!("failed to send update notification: {}", e);
+                    }
+                });
+
+                return Result::Ok(true);
+            }
+
             // Download and install on all platforms
             {
                 #[cfg(target_os = "windows")]
@@ -642,4 +671,36 @@ pub fn start_update_check(
     });
 
     Ok(updates_manager)
+}
+
+pub fn is_macos_admin() -> bool {
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
+    #[cfg(target_os = "macos")]
+    {
+        static IS_ADMIN: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *IS_ADMIN.get_or_init(
+            || match std::process::Command::new("id").arg("-Gn").output() {
+                Ok(output) => {
+                    let groups = String::from_utf8_lossy(&output.stdout);
+                    groups.split_whitespace().any(|g| g == "admin")
+                }
+                Err(_) => true,
+            },
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_macos_admin() {
+        // Just verify it doesn't panic and returns a boolean
+        let is_admin = is_macos_admin();
+        println!("is_admin: {}", is_admin);
+    }
 }
