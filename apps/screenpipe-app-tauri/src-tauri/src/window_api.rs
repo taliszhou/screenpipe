@@ -35,113 +35,115 @@ use tracing::{debug, error, info};
 static MAGNIFY_APP_HANDLE: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
 
 /// Call once during app setup to store the AppHandle for the magnify handler.
+
 #[cfg(target_os = "macos")]
-pub fn init_magnify_handler(app: tauri::AppHandle) {
+fn ensure_classes_registered() {
     use objc::declare::ClassDecl;
     use objc::runtime::{Class, Object, Sel};
+    use std::sync::Once;
 
-    let _ = MAGNIFY_APP_HANDLE.set(app);
-
-    // Register ObjC class with handleMagnify: method (only once)
-    if Class::get("ScreenpipeMagnifyHandler").is_none() {
-        let superclass = Class::get("NSObject").unwrap();
-        let mut decl = ClassDecl::new("ScreenpipeMagnifyHandler", superclass).unwrap();
-        extern "C" fn handle_magnify(_this: &Object, _sel: Sel, recognizer: *mut Object) {
-            with_autorelease_pool(|| unsafe {
-                use objc::{msg_send, sel, sel_impl};
-                let magnification: f64 = msg_send![recognizer, magnification];
-                // Reset so next callback gives delta, not cumulative
-                let _: () = msg_send![recognizer, setMagnification: 0.0f64];
-                if let Some(app) = MAGNIFY_APP_HANDLE.get() {
-                    let _ = app.emit("native-magnify", magnification);
-                }
-            });
-        }
-        unsafe {
-            use objc::{sel, sel_impl};
-            decl.add_method(
-                sel!(handleMagnify:),
-                handle_magnify as extern "C" fn(&Object, Sel, *mut Object),
-            );
-        }
-        decl.register();
-    }
-
-    info!("magnify gesture handler registered");
-
-    // Register a custom ObjC class that handles scrollWheel forwarding.
-    // WKWebView in standard WebviewWindows (e.g. settings) consumes trackpad
-    // wheel events at the native level — they never reach JavaScript.
-    // We swizzle WKWebView's scrollWheel: to also emit "native-scroll" Tauri
-    // events so the JS timeline code can handle scroll navigation.
-    if Class::get("ScreenpipeScrollInterceptor").is_none() {
-        // Store original IMP so we can call it after emitting
-        static ORIGINAL_SCROLL_WHEEL: std::sync::OnceLock<
-            extern "C" fn(&Object, Sel, *mut Object),
-        > = std::sync::OnceLock::new();
-
-        extern "C" fn swizzled_scroll_wheel(this: &Object, sel: Sel, event: *mut Object) {
-            with_autorelease_pool(|| unsafe {
-                use objc::{msg_send, sel, sel_impl};
-                // Emit Tauri event with scroll data
-                if let Some(app) = MAGNIFY_APP_HANDLE.get() {
-                    let delta_y: f64 = msg_send![event, scrollingDeltaY];
-                    let delta_x: f64 = msg_send![event, scrollingDeltaX];
-                    let modifier_flags: u64 = msg_send![event, modifierFlags];
-                    let ctrl_key = (modifier_flags & (1 << 18)) != 0;
-                    let meta_key = (modifier_flags & (1 << 20)) != 0;
-
-                    let _ = app.emit(
-                        "native-scroll",
-                        serde_json::json!({
-                            "deltaX": delta_x,
-                            "deltaY": delta_y,
-                            "ctrlKey": ctrl_key,
-                            "metaKey": meta_key,
-                        }),
-                    );
-                }
-                // Always call the original scrollWheel: so native CSS
-                // overflow scrolling keeps working in all windows.
-                // The native-scroll Tauri event is emitted above for
-                // timeline/search components that need it.
-                if let Some(original) = ORIGINAL_SCROLL_WHEEL.get() {
-                    original(this, sel, event);
-                }
-            });
+    static INIT: Once = Once::new();
+    INIT.call_once(|| {
+        // Register ObjC class with handleMagnify: method (only once)
+        if Class::get("ScreenpipeMagnifyHandler").is_none() {
+            let superclass = Class::get("NSObject").unwrap();
+            let mut decl = ClassDecl::new("ScreenpipeMagnifyHandler", superclass).unwrap();
+            extern "C" fn handle_magnify(_this: &Object, _sel: Sel, recognizer: *mut Object) {
+                with_autorelease_pool(|| unsafe {
+                    use objc::{msg_send, sel, sel_impl};
+                    let magnification: f64 = msg_send![recognizer, magnification];
+                    // Reset so next callback gives delta, not cumulative
+                    let _: () = msg_send![recognizer, setMagnification: 0.0f64];
+                    if let Some(app) = MAGNIFY_APP_HANDLE.get() {
+                        let _ = app.emit("native-magnify", magnification);
+                    }
+                });
+            }
+            unsafe {
+                use objc::{sel, sel_impl};
+                decl.add_method(
+                    sel!(handleMagnify:),
+                    handle_magnify as extern "C" fn(&Object, Sel, *mut Object),
+                );
+            }
+            decl.register();
+            info!("magnify gesture handler registered");
         }
 
-        // Swizzle WKWebView scrollWheel:
-        unsafe {
-            use objc::runtime::{
-                class_getInstanceMethod, method_getImplementation, method_setImplementation,
-            };
-            use objc::{sel, sel_impl};
+        // Register a custom ObjC class that handles scrollWheel forwarding.
+        if Class::get("ScreenpipeScrollInterceptor").is_none() {
+            // Store original IMP so we can call it after emitting
+            static ORIGINAL_SCROLL_WHEEL: std::sync::OnceLock<
+                extern "C" fn(&Object, Sel, *mut Object),
+            > = std::sync::OnceLock::new();
 
-            let wk_class = Class::get("WKWebView");
-            if let Some(wk_class) = wk_class {
-                let scroll_sel = sel!(scrollWheel:);
-                let method = class_getInstanceMethod(wk_class as *const _ as *mut _, scroll_sel);
-                if !method.is_null() {
-                    let original_imp = method_getImplementation(method as *const _);
-                    let original_fn: extern "C" fn(&Object, Sel, *mut Object) =
-                        std::mem::transmute(original_imp);
-                    let _ = ORIGINAL_SCROLL_WHEEL.set(original_fn);
+            extern "C" fn swizzled_scroll_wheel(this: &Object, sel: Sel, event: *mut Object) {
+                with_autorelease_pool(|| unsafe {
+                    use objc::{msg_send, sel, sel_impl};
+                    // Emit Tauri event with scroll data
+                    if let Some(app) = MAGNIFY_APP_HANDLE.get() {
+                        let delta_y: f64 = msg_send![event, scrollingDeltaY];
+                        let delta_x: f64 = msg_send![event, scrollingDeltaX];
+                        let modifier_flags: u64 = msg_send![event, modifierFlags];
+                        let ctrl_key = (modifier_flags & (1 << 18)) != 0;
+                        let meta_key = (modifier_flags & (1 << 20)) != 0;
 
-                    let new_imp: objc::runtime::Imp = std::mem::transmute(
-                        swizzled_scroll_wheel as extern "C" fn(&Object, Sel, *mut Object),
-                    );
-                    method_setImplementation(method as *mut _, new_imp);
-                    info!("WKWebView scrollWheel: swizzled for native-scroll events");
+                        let _ = app.emit(
+                            "native-scroll",
+                            serde_json::json!({
+                                "deltaX": delta_x,
+                                "deltaY": delta_y,
+                                "ctrlKey": ctrl_key,
+                                "metaKey": meta_key,
+                            }),
+                        );
+                    }
+                    if let Some(original) = ORIGINAL_SCROLL_WHEEL.get() {
+                        original(this, sel, event);
+                    }
+                });
+            }
+
+            // Swizzle WKWebView scrollWheel:
+            unsafe {
+                use objc::runtime::{
+                    class_getInstanceMethod, method_getImplementation, method_setImplementation,
+                };
+                use objc::{sel, sel_impl};
+
+                let wk_class = Class::get("WKWebView");
+                if let Some(wk_class) = wk_class {
+                    let scroll_sel = sel!(scrollWheel:);
+                    let method =
+                        class_getInstanceMethod(wk_class as *const _ as *mut _, scroll_sel);
+                    if !method.is_null() {
+                        let original_imp = method_getImplementation(method as *const _);
+                        let original_fn: extern "C" fn(&Object, Sel, *mut Object) =
+                            std::mem::transmute(original_imp);
+                        let _ = ORIGINAL_SCROLL_WHEEL.set(original_fn);
+
+                        let new_imp: objc::runtime::Imp = std::mem::transmute(
+                            swizzled_scroll_wheel as extern "C" fn(&Object, Sel, *mut Object),
+                        );
+                        method_setImplementation(method as *mut _, new_imp);
+                        info!("WKWebView scrollWheel: swizzled for native-scroll events");
+                    }
                 }
             }
-        }
 
-        // Register dummy class so we don't re-swizzle
-        let superclass = Class::get("NSObject").unwrap();
-        let decl = ClassDecl::new("ScreenpipeScrollInterceptor", superclass).unwrap();
-        decl.register();
-    }
+            // Register dummy class so we don't re-swizzle
+            let superclass = Class::get("NSObject").unwrap();
+            let decl = ClassDecl::new("ScreenpipeScrollInterceptor", superclass).unwrap();
+            decl.register();
+        }
+    });
+}
+
+/// Call once during app setup to store the AppHandle for the magnify handler.
+#[cfg(target_os = "macos")]
+pub fn init_magnify_handler(app: tauri::AppHandle) {
+    let _ = MAGNIFY_APP_HANDLE.set(app);
+    ensure_classes_registered();
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -151,6 +153,8 @@ pub fn init_magnify_handler(_app: tauri::AppHandle) {}
 /// Safe to call multiple times — skips if already attached.
 #[cfg(target_os = "macos")]
 unsafe fn attach_magnify_gesture_to_view(view: tauri_nspanel::cocoa::base::id) {
+    ensure_classes_registered();
+
     with_autorelease_pool(|| {
         use objc::{class, msg_send, sel, sel_impl};
         use tauri_nspanel::cocoa::base::{id, nil};
@@ -384,51 +388,51 @@ fn restore_frontmost_app_if_external_with_app(app: Option<&AppHandle>) {
 #[cfg(target_os = "macos")]
 pub unsafe fn make_nswindow_webview_first_responder(ns_win: tauri_nspanel::cocoa::base::id) {
     with_autorelease_pool(|| {
-    use objc::{class, msg_send, sel, sel_impl};
-    use tauri_nspanel::cocoa::base::{id, nil};
-    use tauri_nspanel::cocoa::foundation::NSArray;
+        use objc::{class, msg_send, sel, sel_impl};
+        use tauri_nspanel::cocoa::base::{id, nil};
+        use tauri_nspanel::cocoa::foundation::NSArray;
 
-    let content_view: id = msg_send![ns_win, contentView];
-    let wk_class: *const objc::runtime::Class = class!(WKWebView);
+        let content_view: id = msg_send![ns_win, contentView];
+        let wk_class: *const objc::runtime::Class = class!(WKWebView);
 
-    // BFS through subview tree to find WKWebView
-    let mut wk_view: id = nil;
-    let mut queue: Vec<id> = vec![content_view];
-    while let Some(view) = queue.pop() {
-        let is_wk: bool = msg_send![view, isKindOfClass: wk_class];
-        if is_wk {
-            wk_view = view;
-            break;
-        }
-        let subviews: id = msg_send![view, subviews];
-        if subviews != nil {
-            let count: u64 = NSArray::count(subviews);
-            for i in 0..count {
-                let child: id = NSArray::objectAtIndex(subviews, i);
-                queue.push(child);
+        // BFS through subview tree to find WKWebView
+        let mut wk_view: id = nil;
+        let mut queue: Vec<id> = vec![content_view];
+        while let Some(view) = queue.pop() {
+            let is_wk: bool = msg_send![view, isKindOfClass: wk_class];
+            if is_wk {
+                wk_view = view;
+                break;
+            }
+            let subviews: id = msg_send![view, subviews];
+            if subviews != nil {
+                let count: u64 = NSArray::count(subviews);
+                for i in 0..count {
+                    let child: id = NSArray::objectAtIndex(subviews, i);
+                    queue.push(child);
+                }
             }
         }
-    }
 
-    if wk_view != nil {
-        // Disable native scroll on any enclosing NSScrollView wrapping the WKWebView.
-        // Without this, macOS trackpad wheel events are consumed at the AppKit level
-        // and never reach JavaScript — breaking embedded timeline scroll gestures.
-        let scroll_view: id = msg_send![wk_view, enclosingScrollView];
-        if scroll_view != nil {
-            // NSScrollElasticityNone = 1 — prevents bounce scrolling
-            let _: () = msg_send![scroll_view, setVerticalScrollElasticity: 1i64];
-            let _: () = msg_send![scroll_view, setHorizontalScrollElasticity: 1i64];
-            let _: () = msg_send![scroll_view, setHasVerticalScroller: false];
-            let _: () = msg_send![scroll_view, setHasHorizontalScroller: false];
+        if wk_view != nil {
+            // Disable native scroll on any enclosing NSScrollView wrapping the WKWebView.
+            // Without this, macOS trackpad wheel events are consumed at the AppKit level
+            // and never reach JavaScript — breaking embedded timeline scroll gestures.
+            let scroll_view: id = msg_send![wk_view, enclosingScrollView];
+            if scroll_view != nil {
+                // NSScrollElasticityNone = 1 — prevents bounce scrolling
+                let _: () = msg_send![scroll_view, setVerticalScrollElasticity: 1i64];
+                let _: () = msg_send![scroll_view, setHorizontalScrollElasticity: 1i64];
+                let _: () = msg_send![scroll_view, setHasVerticalScroller: false];
+                let _: () = msg_send![scroll_view, setHasHorizontalScroller: false];
+            }
+
+            // Attach pinch-to-zoom gesture recognizer (same as NSPanel overlay)
+            attach_magnify_gesture_to_view(wk_view);
+
+            // Set first responder immediately
+            let _: () = msg_send![ns_win, makeFirstResponder: wk_view];
         }
-
-        // Attach pinch-to-zoom gesture recognizer (same as NSPanel overlay)
-        attach_magnify_gesture_to_view(wk_view);
-
-        // Set first responder immediately
-        let _: () = msg_send![ns_win, makeFirstResponder: wk_view];
-    }
     }); // with_autorelease_pool
 }
 
@@ -443,44 +447,44 @@ pub unsafe fn make_nswindow_webview_first_responder(ns_win: tauri_nspanel::cocoa
 #[cfg(target_os = "macos")]
 pub unsafe fn make_webview_first_responder(panel: &tauri_nspanel::raw_nspanel::RawNSPanel) {
     with_autorelease_pool(|| {
-    use objc::{class, msg_send, sel, sel_impl};
-    use tauri_nspanel::cocoa::base::{id, nil};
-    use tauri_nspanel::cocoa::foundation::NSArray;
+        use objc::{class, msg_send, sel, sel_impl};
+        use tauri_nspanel::cocoa::base::{id, nil};
+        use tauri_nspanel::cocoa::foundation::NSArray;
 
-    let content_view: id = panel.content_view();
-    let wk_class: *const objc::runtime::Class = class!(WKWebView);
+        let content_view: id = panel.content_view();
+        let wk_class: *const objc::runtime::Class = class!(WKWebView);
 
-    // BFS through subview tree to find WKWebView
-    let mut wk_view: id = nil;
-    let mut queue: Vec<id> = vec![content_view];
-    while let Some(view) = queue.pop() {
-        let is_wk: bool = msg_send![view, isKindOfClass: wk_class];
-        if is_wk {
-            wk_view = view;
-            break;
-        }
-        let subviews: id = msg_send![view, subviews];
-        if subviews != nil {
-            let count: u64 = NSArray::count(subviews);
-            for i in 0..count {
-                let child: id = NSArray::objectAtIndex(subviews, i);
-                queue.push(child);
+        // BFS through subview tree to find WKWebView
+        let mut wk_view: id = nil;
+        let mut queue: Vec<id> = vec![content_view];
+        while let Some(view) = queue.pop() {
+            let is_wk: bool = msg_send![view, isKindOfClass: wk_class];
+            if is_wk {
+                wk_view = view;
+                break;
+            }
+            let subviews: id = msg_send![view, subviews];
+            if subviews != nil {
+                let count: u64 = NSArray::count(subviews);
+                for i in 0..count {
+                    let child: id = NSArray::objectAtIndex(subviews, i);
+                    queue.push(child);
+                }
             }
         }
-    }
 
-    // Fallback: if no WKWebView found, use content_view (shouldn't happen)
-    if wk_view == nil {
-        wk_view = content_view;
-    }
+        // Fallback: if no WKWebView found, use content_view (shouldn't happen)
+        if wk_view == nil {
+            wk_view = content_view;
+        }
 
-    // Attach pinch-to-zoom gesture recognizer directly to the WKWebView.
-    // Must be on the WKWebView (not content_view) so it intercepts gestures
-    // before WebKit's internal multi-process routing claims them.
-    attach_magnify_gesture_to_view(wk_view);
+        // Attach pinch-to-zoom gesture recognizer directly to the WKWebView.
+        // Must be on the WKWebView (not content_view) so it intercepts gestures
+        // before WebKit's internal multi-process routing claims them.
+        attach_magnify_gesture_to_view(wk_view);
 
-    // Set first responder immediately
-    panel.make_first_responder(Some(wk_view));
+        // Set first responder immediately
+        panel.make_first_responder(Some(wk_view));
     }); // with_autorelease_pool
 }
 
@@ -1841,7 +1845,8 @@ impl ShowRewindWindow {
                 let bar_w = 680.0_f64;
                 let bar_h = 80.0; // input row + footer
                 let (x, y) = if let Ok(Some(monitor)) = app.primary_monitor() {
-                    let logical: LogicalSize<f64> = monitor.size().to_logical(monitor.scale_factor());
+                    let logical: LogicalSize<f64> =
+                        monitor.size().to_logical(monitor.scale_factor());
                     let pos = monitor.position();
                     let scale = monitor.scale_factor();
                     let origin_x = pos.x as f64 / scale;
@@ -1854,29 +1859,27 @@ impl ShowRewindWindow {
                     (200.0, 140.0)
                 };
                 let bar_w = if let Ok(Some(monitor)) = app.primary_monitor() {
-                    let logical: LogicalSize<f64> = monitor.size().to_logical(monitor.scale_factor());
+                    let logical: LogicalSize<f64> =
+                        monitor.size().to_logical(monitor.scale_factor());
                     bar_w.min(logical.width - 40.0)
                 } else {
                     bar_w
                 };
 
-                let builder = WebviewWindow::builder(
-                    app,
-                    self.id().label(),
-                    WebviewUrl::App(url.into()),
-                )
-                .title("")
-                .visible(false) // show after panel conversion
-                .accept_first_mouse(true)
-                .shadow(true)
-                .decorations(false)
-                .transparent(true)
-                .always_on_top(true)
-                .inner_size(bar_w, bar_h)
-                .min_inner_size(400.0, 56.0)
-                .position(x, y)
-                .focused(true)
-                .resizable(true);
+                let builder =
+                    WebviewWindow::builder(app, self.id().label(), WebviewUrl::App(url.into()))
+                        .title("")
+                        .visible(false) // show after panel conversion
+                        .accept_first_mouse(true)
+                        .shadow(true)
+                        .decorations(false)
+                        .transparent(true)
+                        .always_on_top(true)
+                        .inner_size(bar_w, bar_h)
+                        .min_inner_size(400.0, 56.0)
+                        .position(x, y)
+                        .focused(true)
+                        .resizable(true);
 
                 let window = builder.build()?;
 
@@ -1888,8 +1891,8 @@ impl ShowRewindWindow {
                     }
                     let window_clone = window.clone();
                     run_on_main_thread_safe(app, move || {
-                        use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
                         use objc::{msg_send, sel, sel_impl};
+                        use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
 
                         if let Ok(panel) = window_clone.to_panel() {
                             // Level 1002 — above Main timeline (1001)
@@ -2189,5 +2192,32 @@ impl ShowRewindWindow {
             window.set_size(size).ok();
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_ensure_classes_registered() {
+        ensure_classes_registered();
+
+        use objc::runtime::Class;
+        let magnify_class = Class::get("ScreenpipeMagnifyHandler");
+        assert!(
+            magnify_class.is_some(),
+            "ScreenpipeMagnifyHandler class was not registered"
+        );
+
+        let scroll_class = Class::get("ScreenpipeScrollInterceptor");
+        assert!(
+            scroll_class.is_some(),
+            "ScreenpipeScrollInterceptor class was not registered"
+        );
+
+        // ensure calling it again doesn't panic
+        ensure_classes_registered();
     }
 }

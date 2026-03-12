@@ -2439,7 +2439,8 @@ async fn main() {
                                 }
                             }
                         })
-                    }).join();
+                    })
+                    .join();
 
                     // Cleanup Pi sidecar
                     let app_handle_pi = app_handle.app_handle().clone();

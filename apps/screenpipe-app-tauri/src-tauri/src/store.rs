@@ -977,8 +977,7 @@ impl PipeSuggestionsSettingsStore {
         if store.is_empty() {
             return Ok(None);
         }
-        let settings =
-            serde_json::from_value(store.get("pipe_suggestions").unwrap_or(Value::Null));
+        let settings = serde_json::from_value(store.get("pipe_suggestions").unwrap_or(Value::Null));
         match settings {
             Ok(settings) => Ok(settings),
             Err(_) => Ok(None),

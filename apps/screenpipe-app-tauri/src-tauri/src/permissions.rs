@@ -361,8 +361,9 @@ pub fn do_permissions_check(initial_check: bool) -> OSPermissionsCheck {
                 use objc::*;
 
                 let cls = objc::class!(AVCaptureDevice);
-                let status: AVAuthorizationStatus =
-                    unsafe { msg_send![cls, authorizationStatusForMediaType:media_type.into_ns_str()] };
+                let status: AVAuthorizationStatus = unsafe {
+                    msg_send![cls, authorizationStatusForMediaType:media_type.into_ns_str()]
+                };
                 match status {
                     AVAuthorizationStatus::NotDetermined => OSPermissionStatus::Empty,
                     AVAuthorizationStatus::Authorized => OSPermissionStatus::Granted,

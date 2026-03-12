@@ -371,10 +371,7 @@ impl PiManager {
     ) -> Result<oneshot::Receiver<RpcResponse>, String> {
         let req_id = self.send_command_inner(command)?;
         let (tx, rx) = oneshot::channel();
-        self.pending_responses
-            .lock()
-            .unwrap()
-            .insert(req_id, tx);
+        self.pending_responses.lock().unwrap().insert(req_id, tx);
         // Caller awaits `rx` with a timeout
         let _ = timeout; // timeout is applied by the caller via tokio::time::timeout
         Ok(rx)
@@ -1320,7 +1317,9 @@ pub async fn pi_start_inner(
                         if let Some(id) = event.get("id").and_then(|v| v.as_str()) {
                             let mut pending = pending_for_reader.lock().unwrap();
                             if let Some(tx) = pending.remove(id) {
-                                if let Ok(rpc) = serde_json::from_value::<RpcResponse>(event.clone()) {
+                                if let Ok(rpc) =
+                                    serde_json::from_value::<RpcResponse>(event.clone())
+                                {
                                     let _ = tx.send(rpc);
                                 }
                             }
@@ -1520,12 +1519,17 @@ async fn await_rpc_response(
             if resp.success == Some(true) {
                 Ok(())
             } else {
-                Err(resp.error.unwrap_or_else(|| format!("{} failed", command_name)))
+                Err(resp
+                    .error
+                    .unwrap_or_else(|| format!("{} failed", command_name)))
             }
         }
         Ok(Err(_)) => {
             // Channel dropped — process likely died
-            Err(format!("Pi process died while waiting for {} response", command_name))
+            Err(format!(
+                "Pi process died while waiting for {} response",
+                command_name
+            ))
         }
         Err(_) => {
             warn!("Timed out waiting for Pi {} response", command_name);

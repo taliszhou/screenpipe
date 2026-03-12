@@ -40,7 +40,8 @@ static ANALYZE_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::Ato
 pub async fn livetext_is_available() -> Result<bool, String> {
     #[cfg(target_os = "macos")]
     {
-        let result = crate::window_api::with_autorelease_pool(|| unsafe { livetext_ffi::lt_is_available() });
+        let result =
+            crate::window_api::with_autorelease_pool(|| unsafe { livetext_ffi::lt_is_available() });
         info!(
             "livetext_is_available: lt_is_available() returned {}",
             result
