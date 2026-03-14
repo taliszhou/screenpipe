@@ -34,7 +34,7 @@ export interface DiskUsage {
 }
 
 export function useDiskUsage() {
-  const { getDataDir } = useSettings();
+  const { getDataDir, isSettingsLoaded, settings } = useSettings();
   const [diskUsage, setDiskUsage] = useState<DiskUsage | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,8 +81,10 @@ export function useDiskUsage() {
   };
 
   useEffect(() => {
-    fetchDiskUsage();
-  }, []);
+    if (isSettingsLoaded) {
+      fetchDiskUsage();
+    }
+  }, [isSettingsLoaded, settings.dataDir]);
 
   return {
     diskUsage,
