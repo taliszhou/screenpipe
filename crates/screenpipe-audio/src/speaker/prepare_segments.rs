@@ -32,13 +32,10 @@ pub async fn prepare_segments(
     }
 
     // Silero VAD v5 expects continuous 512-sample chunks at 16kHz (32ms).
-    // On Windows, WASAPI delivers lower audio levels than CoreAudio, so we
-    // must feed Silero at its native frame size to preserve its LSTM temporal
-    // state — using 1600 caused 68ms gaps that broke speech detection.
-    #[cfg(target_os = "windows")]
+    // Silero VAD v5 requires fixed 512 samples for 16kHz (~32ms) to preserve
+    // its LSTM temporal state. Previously this was 1600 on macOS/Linux which
+    // caused 68ms gaps and broke speech detection.
     let frame_size = 512;
-    #[cfg(not(target_os = "windows"))]
-    let frame_size = 1600;
     let vad_engine = vad_engine.clone();
 
     // Use a lower speech threshold for output/system audio devices.

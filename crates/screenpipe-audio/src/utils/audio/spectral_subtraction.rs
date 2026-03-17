@@ -4,7 +4,7 @@ use realfft::RealFftPlanner;
 
 pub fn spectral_subtraction(audio: &[f32], d: f32) -> Result<Vec<f32>> {
     let mut real_planner = RealFftPlanner::<f32>::new();
-    let window_size = 1600; // 16k sample rate - 100ms
+    let window_size = 512; // 16k sample rate - 32ms
     let r2c = real_planner.plan_fft_forward(window_size);
 
     let mut y = r2c.make_output_vec();
