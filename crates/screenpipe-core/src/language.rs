@@ -1,3 +1,4 @@
+#![allow(clippy::items_after_test_module)]
 use clap::ValueEnum;
 use serde::Serialize;
 use std::fmt;

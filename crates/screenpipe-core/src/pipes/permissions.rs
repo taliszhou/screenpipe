@@ -202,6 +202,7 @@ impl PipePermissions {
     }
 
     /// Check if an HTTP request (method + path) is allowed.
+    #[allow(clippy::collapsible_match)]
     pub fn is_endpoint_allowed(&self, method: &str, path: &str) -> bool {
         // No endpoint restrictions → full access
         let has_api_rules = self
@@ -863,6 +864,7 @@ mod tests {
             permissions: PipePermissionsConfig::default(),
             connections: vec![],
             timeout: None,
+            trigger: None,
             source_slug: None,
             installed_version: None,
             source_hash: None,
@@ -887,6 +889,7 @@ mod tests {
             permissions: PipePermissionsConfig::Preset("reader".to_string()),
             connections: vec![],
             timeout: None,
+            trigger: None,
             source_slug: None,
             installed_version: None,
             source_hash: None,
@@ -923,6 +926,7 @@ mod tests {
             },
             connections: vec![],
             timeout: None,
+            trigger: None,
             source_slug: None,
             installed_version: None,
             source_hash: None,
@@ -972,6 +976,7 @@ mod tests {
             permissions: PipePermissionsConfig::default(),
             connections: vec![],
             timeout: None,
+            trigger: None,
             source_slug: None,
             installed_version: None,
             source_hash: None,
