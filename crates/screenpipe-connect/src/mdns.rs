@@ -16,11 +16,7 @@ use std::time::Duration;
 use tracing::{debug, info, warn};
 
 fn get_hostname() -> String {
-    let cmd = if cfg!(windows) {
-        "hostname"
-    } else {
-        "hostname"
-    };
+    let cmd = "hostname";
     std::process::Command::new(cmd)
         .output()
         .ok()
@@ -62,7 +58,7 @@ pub fn advertise(port: u16) -> Result<(), String> {
     let hostname = get_hostname();
 
     // Instance name must be unique on the network
-    let instance_name = format!("{}", hostname);
+    let instance_name = hostname.to_string();
 
     let service = ServiceInfo::new(
         SERVICE_TYPE,
