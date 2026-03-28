@@ -349,8 +349,7 @@ pub async fn get_cpal_device_and_config(
             })
             .ok_or_else(|| anyhow!("No supported output configurations found"))?;
 
-        best_config
-            .clone()
+        (*best_config)
             .with_sample_rate(best_config.max_sample_rate())
     } else {
         let configs: Vec<_> = cpal_audio_device.supported_input_configs()?.collect();
@@ -364,8 +363,7 @@ pub async fn get_cpal_device_and_config(
             })
             .ok_or_else(|| anyhow!("No supported input configurations found"))?;
 
-        best_config
-            .clone()
+        (*best_config)
             .with_sample_rate(best_config.max_sample_rate())
     };
 

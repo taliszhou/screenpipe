@@ -912,8 +912,10 @@ mod tests {
                 "neural networks process natural language understanding efficiently",
             ],
         ];
+        #[allow(clippy::needless_range_loop)]
         for n in 0..3 {
             let speaker = db.insert_speaker(&vec![n as f32; 512]).await.unwrap();
+            #[allow(clippy::needless_range_loop)]
             for i in 0..=n {
                 let audio_chunk_id = db
                     .insert_audio_chunk(&format!("audio{}{}", n, i), None)
@@ -993,8 +995,10 @@ mod tests {
                 "ribosomes assemble protein chains from messenger templates",
             ],
         ];
+        #[allow(clippy::needless_range_loop)]
         for n in 0..3 {
             let speaker = db.insert_speaker(&vec![n as f32; 512]).await.unwrap();
+            #[allow(clippy::needless_range_loop)]
             for i in 0..=n {
                 let audio_chunk_id = db
                     .insert_audio_chunk(&format!("audio_ids_{}{}", n, i), None)

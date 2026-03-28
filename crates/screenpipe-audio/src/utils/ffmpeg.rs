@@ -9,7 +9,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::{
     path::Path,
-    process::{Command, Stdio},
+    process::Stdio,
 };
 use tracing::debug;
 use tracing::error;

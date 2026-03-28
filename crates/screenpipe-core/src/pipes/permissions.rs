@@ -248,15 +248,13 @@ impl PipePermissions {
         // Default allowlist
         if self.use_default_allowlist {
             for pattern in DEFAULT_ALLOWED_ENDPOINTS {
-                if let Some(rule) = parse_bare_api(pattern) {
-                    if let PermissionRule::Api {
-                        method: rm,
-                        path: rp,
-                    } = &rule
-                    {
-                        if (rm == "*" || rm == &m) && glob_match(rp, path) {
-                            return true;
-                        }
+                if let Some(PermissionRule::Api {
+                    method: ref rm,
+                    path: ref rp,
+                }) = parse_bare_api(pattern)
+                {
+                    if (rm == "*" || rm == &m) && glob_match(rp, path) {
+                        return true;
                     }
                 }
             }
@@ -867,6 +865,7 @@ mod tests {
             installed_version: None,
             source_hash: None,
             config: std::collections::HashMap::new(),
+            trigger: None,
         };
         let perms = PipePermissions::from_config(&config);
         assert!(!perms.has_any_restrictions());
@@ -891,6 +890,7 @@ mod tests {
             installed_version: None,
             source_hash: None,
             config: std::collections::HashMap::new(),
+            trigger: None,
         };
         let perms = PipePermissions::from_config(&config);
         assert!(perms.has_any_restrictions());
@@ -927,6 +927,7 @@ mod tests {
             installed_version: None,
             source_hash: None,
             config: std::collections::HashMap::new(),
+            trigger: None,
         };
         let perms = PipePermissions::from_config(&config);
         assert!(perms.has_any_restrictions());
@@ -976,6 +977,7 @@ mod tests {
             installed_version: None,
             source_hash: None,
             config: std::collections::HashMap::new(),
+            trigger: None,
         };
         let perms = PipePermissions::from_config(&config);
         assert!(perms.offline_mode);

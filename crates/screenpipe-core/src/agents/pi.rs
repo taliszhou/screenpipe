@@ -149,6 +149,7 @@ impl PiExecutor {
         use crate::pipes::permissions::PipePermissions;
         let perms = PipePermissions::from_config(config);
 
+        #[allow(clippy::type_complexity)]
         let all_skills: &[(&str, &str, Box<dyn Fn(&PipePermissions) -> bool>)] = &[
             (
                 "screenpipe-api",
@@ -1454,13 +1455,17 @@ mod tests {
     #[test]
     fn test_lossy_utf8_handles_invalid_bytes() {
         // Simulate raw bytes from a pipe: "Hi" + 0xFF 0xFE (invalid UTF-8) + newline + "OK" + newline
+        #[allow(invalid_from_utf8)]
         let raw_bytes: &[u8] = b"Hi\xff\xfe\nOK\n";
 
         // Strict UTF-8 should fail
-        assert!(
-            std::str::from_utf8(raw_bytes).is_err(),
-            "raw bytes should not be valid UTF-8"
-        );
+        #[allow(invalid_from_utf8)]
+        {
+            assert!(
+                std::str::from_utf8(raw_bytes).is_err(),
+                "raw bytes should not be valid UTF-8"
+            );
+        }
 
         // Lossy conversion should succeed — this is what our fix does
         let mut lines = Vec::new();

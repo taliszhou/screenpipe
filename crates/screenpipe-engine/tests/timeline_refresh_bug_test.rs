@@ -1,3 +1,4 @@
+#![allow(warnings)]
 /// Tests to reproduce the timeline refresh bug where new frames are not pushed to clients.
 ///
 /// The bug: Timeline shows 7:41 PM but current time is 7:55 PM - a 14 minute gap.
@@ -347,7 +348,7 @@ mod tests {
         let start_of_day = now.date_naive().and_hms_opt(0, 0, 0).unwrap();
         let end_of_day = now.date_naive().and_hms_opt(23, 59, 59).unwrap();
 
-        let start_time = Utc.from_utc_datetime(&start_of_day);
+        let _start_time = Utc.from_utc_datetime(&start_of_day);
         let end_time = Utc.from_utc_datetime(&end_of_day);
 
         // Condition in server code: `if now <= end_time`
@@ -545,7 +546,7 @@ mod tests {
         // Scenario 2: end_time is in the past (historical request) - should NOT poll
         let past_end = now - Duration::hours(1);
         assert!(
-            !(now <= past_end),
+            (now > past_end),
             "Should NOT poll when end_time is in the past"
         );
 

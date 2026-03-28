@@ -1,3 +1,4 @@
+#![allow(clippy::field_reassign_with_default)]
 //! Optimized frame comparison for CPU-efficient change detection.
 //!
 //! This module provides fast frame comparison to decide whether OCR should run,
@@ -381,7 +382,7 @@ mod tests {
             let is_text_line = (y / line_height) % 2 == 0;
             if is_text_line {
                 let char_width = 10;
-                let is_char = ((x + seed as u32) / char_width) % 3 != 0;
+                let is_char = !((x + seed as u32) / char_width).is_multiple_of(3);
                 if is_char {
                     Rgb([30, 30, 30])
                 } else {

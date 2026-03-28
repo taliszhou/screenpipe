@@ -845,46 +845,46 @@ fn check_signal_match_precomputed(
 ) -> bool {
     match &ps.signal {
         CallSignal::AutomationId(id) => {
-            identifier_lower.map_or(false, |ident| ident.eq_ignore_ascii_case(id))
+            identifier_lower.is_some_and(|ident| ident.eq_ignore_ascii_case(id))
         }
         CallSignal::AutomationIdContains(_) => {
-            identifier_lower.map_or(false, |ident| ident.contains(&ps.lower[..]))
+            identifier_lower.is_some_and(|ident| ident.contains(&ps.lower[..]))
         }
         CallSignal::KeyboardShortcut(_) => {
-            let in_desc = desc_lower.map_or(false, |d| d.contains(&ps.lower[..]));
-            let in_title = title_lower.map_or(false, |t| t.contains(&ps.lower[..]));
+            let in_desc = desc_lower.is_some_and(|d| d.contains(&ps.lower[..]));
+            let in_title = title_lower.is_some_and(|t| t.contains(&ps.lower[..]));
             in_desc || in_title
         }
         CallSignal::RoleWithName { role: r, .. } => {
             if role != *r {
                 return false;
             }
-            let in_title = title_lower.map_or(false, |t| t.contains(&ps.lower[..]));
-            let in_desc = desc_lower.map_or(false, |d| d.contains(&ps.lower[..]));
+            let in_title = title_lower.is_some_and(|t| t.contains(&ps.lower[..]));
+            let in_desc = desc_lower.is_some_and(|d| d.contains(&ps.lower[..]));
             in_title || in_desc
         }
         CallSignal::MenuBarItem { .. } => {
             if role != "AXMenuBarItem" {
                 return false;
             }
-            title_lower.map_or(false, |t| t.contains(&ps.lower[..]))
+            title_lower.is_some_and(|t| t.contains(&ps.lower[..]))
         }
         CallSignal::MenuItemId(_) => {
             if role != "AXMenuItem" {
                 return false;
             }
-            identifier_lower.map_or(false, |ident| ident == &ps.lower[..])
+            identifier_lower.is_some_and(|ident| ident == &ps.lower[..])
         }
         CallSignal::NameContains(_) => {
             // Role-agnostic: match any element whose title or description contains the text
-            let in_title = title_lower.map_or(false, |t| t.contains(&ps.lower[..]));
-            let in_desc = desc_lower.map_or(false, |d| d.contains(&ps.lower[..]));
+            let in_title = title_lower.is_some_and(|t| t.contains(&ps.lower[..]));
+            let in_desc = desc_lower.is_some_and(|d| d.contains(&ps.lower[..]));
             in_title || in_desc
         }
         CallSignal::WindowTitle { .. } => {
             // Checked separately against root window element, not during tree walk.
             // But support it here for completeness (matches on title).
-            title_lower.map_or(false, |t| t.contains(&ps.lower[..]))
+            title_lower.is_some_and(|t| t.contains(&ps.lower[..]))
         }
     }
 }
@@ -942,7 +942,7 @@ fn get_ax_identifier(elem: &cidre::ax::UiElement) -> Option<String> {
     // Try AXIdentifier (native apps)
     let ident_name = cidre::cf::String::from_str("AXIdentifier");
     let ident_attr = cidre::ax::Attr::with_string(&ident_name);
-    if let Some(val) = get_ax_string_attr(elem, &ident_attr) {
+    if let Some(val) = get_ax_string_attr(elem, ident_attr) {
         if !val.is_empty() {
             return Some(val);
         }
@@ -951,7 +951,7 @@ fn get_ax_identifier(elem: &cidre::ax::UiElement) -> Option<String> {
     // Try AXDOMIdentifier (web content in browsers/Electron)
     let dom_ident_name = cidre::cf::String::from_str("AXDOMIdentifier");
     let dom_ident_attr = cidre::ax::Attr::with_string(&dom_ident_name);
-    if let Some(val) = get_ax_string_attr(elem, &dom_ident_attr) {
+    if let Some(val) = get_ax_string_attr(elem, dom_ident_attr) {
         if !val.is_empty() {
             return Some(val);
         }
@@ -1645,8 +1645,7 @@ pub fn find_running_meeting_apps(
                 // Check browser URL patterns — only if this is a browser
                 if !profile.app_identifiers.browser_url_patterns.is_empty()
                     && BROWSER_NAMES.iter().any(|b| name_lower.contains(b))
-                {
-                    if has_browser_meeting_url(pid, &profile.app_identifiers.browser_url_patterns) {
+                    && has_browser_meeting_url(pid, profile.app_identifiers.browser_url_patterns) {
                         results.push(RunningMeetingApp {
                             pid,
                             app_name: name.clone(),
@@ -1655,7 +1654,6 @@ pub fn find_running_meeting_apps(
                         });
                         break;
                     }
-                }
             }
         }
     });
@@ -2100,7 +2098,7 @@ pub async fn run_meeting_detection_loop(
                 current_interval = IDLE_NO_APPS_SCAN_INTERVAL;
                 idle_scan_count += 1;
                 // Periodic summary every ~60s (2 cycles at 30s)
-                if idle_scan_count % 2 == 0 {
+                if idle_scan_count.is_multiple_of(2) {
                     debug!(
                         "meeting v2: idle, no meeting apps (scans={})",
                         idle_scan_count

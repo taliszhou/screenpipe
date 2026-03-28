@@ -1,3 +1,4 @@
+#![allow(warnings)]
 use serde_json::Value;
 use std::time::{Duration, Instant};
 

@@ -1,3 +1,4 @@
+#![allow(warnings)]
 use futures::{SinkExt, StreamExt};
 
 #[tokio::test]

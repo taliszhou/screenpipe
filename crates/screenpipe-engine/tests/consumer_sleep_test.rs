@@ -1,3 +1,4 @@
+#![allow(warnings)]
 /// Test that the record_video consumer loop drains the OCR frame queue promptly.
 ///
 /// The bug: the consumer loop slept for 1/fps (2 seconds at 0.5 FPS) on EVERY

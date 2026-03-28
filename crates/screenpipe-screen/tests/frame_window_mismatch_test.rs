@@ -1,3 +1,4 @@
+#![allow(warnings)]
 //! Test to reproduce the frame-window mismatch issue
 //!
 //! The bug: Multiple database records (one per window) are created per capture cycle,
@@ -7,7 +8,6 @@
 //!
 //! Run with: cargo test -p screenpipe-screen --test frame_window_mismatch_test -- --nocapture
 
-use std::collections::HashMap;
 
 /// Simulates the video file - one frame per capture cycle
 struct MockVideoFile {

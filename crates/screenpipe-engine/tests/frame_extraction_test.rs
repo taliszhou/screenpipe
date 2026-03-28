@@ -1,3 +1,4 @@
+#![allow(warnings)]
 use std::process::Stdio;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -192,7 +193,7 @@ async fn test_fragmented_mp4_allows_extraction_during_write() {
 
     // Start ffmpeg with fragmented MP4 flags (same as our fix)
     let ffmpeg = find_ffmpeg();
-    let mut child = Command::new(&ffmpeg)
+    let child = Command::new(&ffmpeg)
         .args([
             "-f",
             "lavfi",
@@ -459,7 +460,7 @@ async fn test_race_condition_during_recording() {
 
     // Start ffmpeg encoding (simulates video recording)
     let ffmpeg = find_ffmpeg();
-    let mut child = Command::new(&ffmpeg)
+    let child = Command::new(&ffmpeg)
         .args([
             "-f",
             "lavfi",

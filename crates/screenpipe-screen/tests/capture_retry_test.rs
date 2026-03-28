@@ -1,3 +1,4 @@
+#![allow(warnings)]
 /// Rigorous tests for the capture retry + refresh logic in continuous_capture.
 ///
 /// The retry pattern (from core.rs):
@@ -390,7 +391,7 @@ fn test_intermittent_failure_never_bails() {
 
     for _ in 0..100 {
         let n = cycle_num.fetch_add(1, Ordering::SeqCst);
-        let mut capture = if n % 2 == 0 {
+        let mut capture = if n.is_multiple_of(2) {
             Box::new(|| Err("fail".to_string())) as Box<dyn FnMut() -> Result<(), String>>
         } else {
             Box::new(|| Ok(())) as Box<dyn FnMut() -> Result<(), String>>

@@ -1,3 +1,4 @@
+#![allow(warnings)]
 use anyhow::Result;
 use dirs::home_dir;
 use screenpipe_core::paths;

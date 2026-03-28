@@ -200,11 +200,9 @@ fn test_db_record_vs_video_frame_mismatch() {
     let (skip_apps, skip_titles) = create_skip_sets();
 
     // Simulate 3 capture cycles, each with Arc having an empty + real window
-    let capture_cycles = vec![
-        vec![("Arc", ""), ("Arc", "Reddit")],
+    let capture_cycles = [vec![("Arc", ""), ("Arc", "Reddit")],
         vec![("Arc", ""), ("Arc", "GitHub")],
-        vec![("Arc", ""), ("Arc", "WhatsApp")],
-    ];
+        vec![("Arc", ""), ("Arc", "WhatsApp")]];
 
     println!("\n=== DB Record vs Video Frame Mismatch ===\n");
 
