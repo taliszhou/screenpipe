@@ -15,7 +15,15 @@ func makeCString(_ str: String) -> UnsafePointer<CChar> {
 public typealias TimelineActionCallback = @convention(c) (UnsafePointer<CChar>) -> Void
 var gTimelineCallback: TimelineActionCallback?
 
-// MARK: - FFI entry points
+private func onMain(_ block: @escaping () -> Void) {
+    if Thread.isMainThread { block() } else { DispatchQueue.main.sync { block() } }
+}
+
+private func onMainAsync(_ block: @escaping () -> Void) {
+    DispatchQueue.main.async { block() }
+}
+
+// MARK: - Availability
 
 @_cdecl("tl_is_available")
 public func tlIsAvailable() -> Int32 {
@@ -23,59 +31,85 @@ public func tlIsAvailable() -> Int32 {
     return 0
 }
 
+// MARK: - Overlay mode (separate floating panel)
+
 @_cdecl("tl_init")
 public func tlInit(_ windowPtr: UInt64) -> Int32 {
-    if Thread.isMainThread {
-        TimelinePanelController.shared.create(parentWindowPtr: windowPtr)
-    } else {
-        DispatchQueue.main.sync {
-            TimelinePanelController.shared.create(parentWindowPtr: windowPtr)
-        }
-    }
+    onMain { TimelinePanelController.shared.createOverlay() }
     return 0
 }
+
+@_cdecl("tl_show")
+public func tlShow() -> Int32 {
+    onMainAsync { TimelinePanelController.shared.showOverlay() }
+    return 0
+}
+
+@_cdecl("tl_hide")
+public func tlHide() -> Int32 {
+    onMainAsync { TimelinePanelController.shared.hideOverlay() }
+    return 0
+}
+
+// MARK: - Embedded mode (inside Tauri window)
+
+@_cdecl("tl_init_embedded")
+public func tlInitEmbedded(_ windowPtr: UInt64) -> Int32 {
+    var result: Int32 = -1
+    onMain {
+        result = TimelinePanelController.shared.initEmbedded(windowPtr: windowPtr) ? 0 : -1
+    }
+    return result
+}
+
+@_cdecl("tl_update_position")
+public func tlUpdatePosition(_ x: Double, _ y: Double, _ w: Double, _ h: Double) -> Int32 {
+    onMainAsync { TimelinePanelController.shared.updateEmbeddedPosition(x: x, y: y, w: w, h: h) }
+    return 0
+}
+
+@_cdecl("tl_show_embedded")
+public func tlShowEmbedded() -> Int32 {
+    onMainAsync { TimelinePanelController.shared.showEmbedded() }
+    return 0
+}
+
+@_cdecl("tl_hide_embedded")
+public func tlHideEmbedded() -> Int32 {
+    onMainAsync { TimelinePanelController.shared.hideEmbedded() }
+    return 0
+}
+
+// MARK: - Data
 
 @_cdecl("tl_push_frames")
 public func tlPushFrames(_ json: UnsafePointer<CChar>) -> Int32 {
     let str = String(cString: json)
     guard let data = str.data(using: .utf8) else { return -1 }
-
     do {
         let batch = try JSONDecoder().decode(TLFrameBatch.self, from: data)
-        DispatchQueue.main.async {
-            TimelineDataStore.shared.pushFrames(batch.frames)
-        }
+        onMainAsync { TimelineDataStore.shared.pushFrames(batch.frames) }
         return 0
     } catch {
-        // Try as raw array
         do {
             let frames = try JSONDecoder().decode([TLTimeSeriesFrame].self, from: data)
-            DispatchQueue.main.async {
-                TimelineDataStore.shared.pushFrames(frames)
-            }
+            onMainAsync { TimelineDataStore.shared.pushFrames(frames) }
             return 0
-        } catch {
-            return -1
-        }
+        } catch { return -1 }
     }
 }
 
 @_cdecl("tl_set_time_range")
-public func tlSetTimeRange(_ startIso: UnsafePointer<CChar>, _ endIso: UnsafePointer<CChar>) -> Int32 {
-    let start = String(cString: startIso)
-    let end = String(cString: endIso)
-    DispatchQueue.main.async {
-        TimelineDataStore.shared.setTimeRange(start: start, end: end)
-    }
+public func tlSetTimeRange(_ start: UnsafePointer<CChar>, _ end: UnsafePointer<CChar>) -> Int32 {
+    let s = String(cString: start), e = String(cString: end)
+    onMainAsync { TimelineDataStore.shared.setTimeRange(start: s, end: e) }
     return 0
 }
 
 @_cdecl("tl_set_current_time")
 public func tlSetCurrentTime(_ iso: UnsafePointer<CChar>) -> Int32 {
     let ts = String(cString: iso)
-    DispatchQueue.main.async {
-        TimelineDataStore.shared.setCurrentTime(ts)
-    }
+    onMainAsync { TimelineDataStore.shared.setCurrentTime(ts) }
     return 0
 }
 
@@ -84,51 +118,13 @@ public func tlSetCallback(_ cb: @escaping TimelineActionCallback) {
     gTimelineCallback = cb
 }
 
-@_cdecl("tl_show")
-public func tlShow() -> Int32 {
-    DispatchQueue.main.async {
-        TimelinePanelController.shared.show()
-    }
-    return 0
-}
-
-@_cdecl("tl_hide")
-public func tlHide() -> Int32 {
-    DispatchQueue.main.async {
-        TimelinePanelController.shared.hide()
-    }
-    return 0
-}
-
-@_cdecl("tl_update_position")
-public func tlUpdatePosition(_ x: Double, _ y: Double, _ w: Double, _ h: Double) -> Int32 {
-    DispatchQueue.main.async {
-        TimelinePanelController.shared.updatePosition(x: x, y: y, w: w, h: h)
-    }
-    return 0
-}
-
-@_cdecl("tl_destroy")
-public func tlDestroy() -> Int32 {
-    if Thread.isMainThread {
-        TimelinePanelController.shared.destroy()
-        TimelineDataStore.shared.clear()
-    } else {
-        DispatchQueue.main.sync {
-            TimelinePanelController.shared.destroy()
-            TimelineDataStore.shared.clear()
-        }
-    }
-    return 0
-}
-
 @_cdecl("tl_push_meetings")
 public func tlPushMeetings(_ json: UnsafePointer<CChar>) -> Int32 {
     let str = String(cString: json)
     guard let data = str.data(using: .utf8) else { return -1 }
     do {
         let batch = try JSONDecoder().decode(TLMeetingBatch.self, from: data)
-        DispatchQueue.main.async { TimelineDataStore.shared.pushMeetings(batch.meetings) }
+        onMainAsync { TimelineDataStore.shared.pushMeetings(batch.meetings) }
         return 0
     } catch { return -1 }
 }
@@ -139,16 +135,25 @@ public func tlPushTags(_ json: UnsafePointer<CChar>) -> Int32 {
     guard let data = str.data(using: .utf8) else { return -1 }
     do {
         let batch = try JSONDecoder().decode(TLTagBatch.self, from: data)
-        DispatchQueue.main.async { TimelineDataStore.shared.pushTags(batch.tags) }
+        onMainAsync { TimelineDataStore.shared.pushTags(batch.tags) }
         return 0
     } catch { return -1 }
 }
 
-@_cdecl("tl_clear")
-public func tlClear() -> Int32 {
-    DispatchQueue.main.async {
+// MARK: - Cleanup
+
+@_cdecl("tl_destroy")
+public func tlDestroy() -> Int32 {
+    onMain {
+        TimelinePanelController.shared.destroy()
         TimelineDataStore.shared.clear()
     }
+    return 0
+}
+
+@_cdecl("tl_clear")
+public func tlClear() -> Int32 {
+    onMainAsync { TimelineDataStore.shared.clear() }
     return 0
 }
 

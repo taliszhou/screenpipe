@@ -4,60 +4,33 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
+async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  try {
+    return await invoke<T>(cmd, args);
+  } catch {
+    return false as T;
+  }
+}
+
 export const nativeTimeline = {
-  async isAvailable(): Promise<boolean> {
-    try {
-      return await invoke<boolean>("native_timeline_is_available");
-    } catch {
-      return false;
-    }
-  },
+  isAvailable: () => call<boolean>("native_timeline_is_available"),
 
-  async init(): Promise<boolean> {
-    try {
-      return await invoke<boolean>("native_timeline_init");
-    } catch {
-      return false;
-    }
-  },
+  // Overlay (separate panel)
+  init: () => call<boolean>("native_timeline_init"),
+  show: () => call<boolean>("native_timeline_show"),
+  hide: () => call<boolean>("native_timeline_hide"),
 
-  async show(): Promise<boolean> {
-    try {
-      return await invoke<boolean>("native_timeline_show");
-    } catch {
-      return false;
-    }
-  },
+  // Embedded (inside Tauri window)
+  initEmbedded: () => call<boolean>("native_timeline_init_embedded"),
+  updatePosition: (x: number, y: number, w: number, h: number) =>
+    call<boolean>("native_timeline_update_position", { x, y, w, h }),
+  showEmbedded: () => call<boolean>("native_timeline_show_embedded"),
+  hideEmbedded: () => call<boolean>("native_timeline_hide_embedded"),
 
-  async hide(): Promise<boolean> {
-    try {
-      return await invoke<boolean>("native_timeline_hide");
-    } catch {
-      return false;
-    }
-  },
+  // Data
+  pushFrames: (json: string) => call<boolean>("native_timeline_push_frames", { json }),
+  setCurrentTime: (iso: string) => call<boolean>("native_timeline_set_current_time", { iso }),
 
-  async pushFrames(json: string): Promise<boolean> {
-    try {
-      return await invoke<boolean>("native_timeline_push_frames", { json });
-    } catch {
-      return false;
-    }
-  },
-
-  async setCurrentTime(iso: string): Promise<boolean> {
-    try {
-      return await invoke<boolean>("native_timeline_set_current_time", { iso });
-    } catch {
-      return false;
-    }
-  },
-
-  async destroy(): Promise<boolean> {
-    try {
-      return await invoke<boolean>("native_timeline_destroy");
-    } catch {
-      return false;
-    }
-  },
+  // Cleanup
+  destroy: () => call<boolean>("native_timeline_destroy"),
 };

@@ -618,13 +618,18 @@ fn build_timeline_stub(out_dir: &std::path::Path, lib_path: &std::path::Path) {
 #include <stdint.h>
 int32_t tl_is_available(void) { return -2; }
 int32_t tl_init(uint64_t w) { return -2; }
+int32_t tl_show(void) { return -2; }
+int32_t tl_hide(void) { return -2; }
+int32_t tl_init_embedded(uint64_t w) { return -2; }
+int32_t tl_update_position(double x, double y, double w, double h) { return -2; }
+int32_t tl_show_embedded(void) { return -2; }
+int32_t tl_hide_embedded(void) { return -2; }
 int32_t tl_push_frames(const char *j) { return -2; }
 int32_t tl_set_time_range(const char *s, const char *e) { return -2; }
 int32_t tl_set_current_time(const char *t) { return -2; }
 void    tl_set_callback(void *cb) {}
-int32_t tl_show(void) { return -2; }
-int32_t tl_hide(void) { return -2; }
-int32_t tl_update_position(double x, double y, double w, double h) { return -2; }
+int32_t tl_push_meetings(const char *j) { return -2; }
+int32_t tl_push_tags(const char *j) { return -2; }
 int32_t tl_destroy(void) { return -2; }
 int32_t tl_clear(void) { return -2; }
 void    tl_free_string(char *p) {}

@@ -34,64 +34,61 @@ class TimelineDataStore: ObservableObject {
     // Filters
     @Published var filterApp: String?
     @Published var filterDevice: String?
-    @Published var filterSpeaker: String?
     @Published var showOcrOverlay: Bool = false
 
     // Search
     @Published var searchQuery: String = ""
-    @Published var searchResults: [Int] = [] // frame indices matching search
+    @Published var searchResults: [Int] = []
 
     // Day navigation
     @Published var currentDate: Date = Date()
 
-    // Meetings
+    // Meetings & tags
     @Published var meetings: [TLMeeting] = []
-
-    // Tags
     @Published var tags: [TLTag] = []
-    let defaultTagNames = ["deep work", "meeting", "admin", "break"]
 
     // Multi-monitor
     @Published var devices: [TLDeviceInfo] = []
-    @Published var activeDeviceId: String? // nil = show all
+    @Published var activeDeviceId: String?
 
-    // Unique values for filter dropdowns
+    // Computed
     var uniqueApps: [String] {
         Array(Set(frames.compactMap { $0.devices.first?.metadata.app_name })).sorted()
     }
     var uniqueDevices: [String] {
         Array(Set(frames.compactMap { $0.devices.first?.device_id })).sorted()
     }
-    var uniqueSpeakers: [String] {
-        Array(Set(frames.flatMap { $0.devices.flatMap { $0.audio.compactMap { $0.speaker_name } } })).sorted()
-    }
-
-    var dayStart: Date {
-        Calendar.current.startOfDay(for: currentDate)
-    }
-    var dayEnd: Date {
-        Calendar.current.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
-    }
+    var dayStart: Date { Calendar.current.startOfDay(for: currentDate) }
+    var dayEnd: Date { Calendar.current.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart }
+    var hasSelection: Bool { selectionStart != nil && selectionEnd != nil }
 
     var filteredAppGroups: [TLAppGroup] {
-        appGroups.filter { group in
-            if let app = filterApp, group.appName != app { return false }
-            if let dev = filterDevice, group.deviceId != dev { return false }
+        appGroups.filter { g in
+            if let app = filterApp, g.appName != app { return false }
+            if let dev = activeDeviceId, g.deviceId != dev { return false }
             return true
         }
     }
 
-    var hasSelection: Bool {
-        selectionStart != nil && selectionEnd != nil
+    var meetingsForCurrentDay: [TLMeeting] {
+        meetings.filter { m in
+            guard let s = m.startDate else { return false }
+            return s >= dayStart && s < dayEnd
+        }
+    }
+
+    var tagsForCurrentDay: [TLTag] {
+        tags.filter { t in
+            guard let s = t.startDate else { return false }
+            return s >= dayStart && s < dayEnd
+        }
     }
 
     private var knownTimestamps: Set<String> = []
 
-    private func parseISO(_ str: String) -> Date? {
-        TLDateParser.parse(str)
-    }
+    private func parseISO(_ str: String) -> Date? { TLDateParser.parse(str) }
 
-    // MARK: - Frame management
+    // MARK: - Frames
 
     func pushFrames(_ newFrames: [TLTimeSeriesFrame]) {
         var added = 0
@@ -103,10 +100,9 @@ class TimelineDataStore: ObservableObject {
         }
         if added > 0 {
             frames.sort { $0.timestamp < $1.timestamp }
+            rebuildDeviceList()
             rebuildAppGroups()
             isLoading = false
-
-            // Auto-select latest frame if nothing selected
             if currentTimestamp == nil, let last = frames.last {
                 setCurrentTime(last.timestamp)
             }
@@ -116,9 +112,7 @@ class TimelineDataStore: ObservableObject {
     func setCurrentTime(_ iso: String) {
         guard let date = parseISO(iso) else { return }
         currentTimestamp = date
-
-        let target = iso
-        if let idx = frames.firstIndex(where: { $0.timestamp >= target }) {
+        if let idx = frames.firstIndex(where: { $0.timestamp >= iso }) {
             currentFrameIndex = idx
             let frame = frames[idx]
             if let device = frame.devices.first {
@@ -134,9 +128,7 @@ class TimelineDataStore: ObservableObject {
 
     func seekRelative(seconds: Double) {
         guard let current = currentTimestamp else { return }
-        let newTime = current.addingTimeInterval(seconds)
-        let iso = ISO8601DateFormatter().string(from: newTime)
-        setCurrentTime(iso)
+        setCurrentTime(TLDateParser.string(from: current.addingTimeInterval(seconds)))
     }
 
     func seekToFrame(index: Int) {
@@ -144,358 +136,223 @@ class TimelineDataStore: ObservableObject {
         setCurrentTime(frames[index].timestamp)
     }
 
-    func nextFrame() {
-        seekToFrame(index: currentFrameIndex + 1)
-    }
-
-    func previousFrame() {
-        seekToFrame(index: currentFrameIndex - 1)
-    }
+    func nextFrame() { seekToFrame(index: currentFrameIndex + 1) }
+    func previousFrame() { seekToFrame(index: currentFrameIndex - 1) }
 
     // MARK: - Selection
 
-    func startSelection(at date: Date) {
-        selectionStart = date
-        selectionEnd = date
-        isSelecting = true
-    }
-
-    func updateSelection(to date: Date) {
-        guard isSelecting else { return }
-        selectionEnd = date
-    }
-
+    func startSelection(at date: Date) { selectionStart = date; selectionEnd = date; isSelecting = true }
+    func updateSelection(to date: Date) { guard isSelecting else { return }; selectionEnd = date }
     func endSelection() {
         isSelecting = false
-        // Normalize: ensure start < end
-        if let s = selectionStart, let e = selectionEnd, s > e {
-            selectionStart = e
-            selectionEnd = s
-        }
+        if let s = selectionStart, let e = selectionEnd, s > e { selectionStart = e; selectionEnd = s }
     }
-
-    func clearSelection() {
-        selectionStart = nil
-        selectionEnd = nil
-        isSelecting = false
-    }
+    func clearSelection() { selectionStart = nil; selectionEnd = nil; isSelecting = false }
 
     // MARK: - Search
 
     func performSearch() {
-        guard !searchQuery.isEmpty else {
-            searchResults = []
-            return
-        }
-        let query = searchQuery.lowercased()
+        guard !searchQuery.isEmpty else { searchResults = []; return }
+        let q = searchQuery.lowercased()
         searchResults = frames.enumerated().compactMap { (idx, frame) in
-            guard let device = frame.devices.first else { return nil }
-            let meta = device.metadata
-            if meta.ocr_text.lowercased().contains(query) { return idx }
-            if meta.app_name.lowercased().contains(query) { return idx }
-            if meta.window_name.lowercased().contains(query) { return idx }
-            if device.audio.contains(where: { $0.transcription.lowercased().contains(query) }) { return idx }
+            guard let d = frame.devices.first else { return nil }
+            if d.metadata.ocr_text.lowercased().contains(q) { return idx }
+            if d.metadata.app_name.lowercased().contains(q) { return idx }
+            if d.metadata.window_name.lowercased().contains(q) { return idx }
+            if d.audio.contains(where: { $0.transcription.lowercased().contains(q) }) { return idx }
             return nil
         }
     }
 
     func nextSearchResult() {
         guard !searchResults.isEmpty else { return }
-        if let current = searchResults.first(where: { $0 > currentFrameIndex }) {
-            seekToFrame(index: current)
-        } else {
-            seekToFrame(index: searchResults[0]) // wrap around
-        }
+        seekToFrame(index: searchResults.first(where: { $0 > currentFrameIndex }) ?? searchResults[0])
     }
-
     func previousSearchResult() {
         guard !searchResults.isEmpty else { return }
-        if let current = searchResults.last(where: { $0 < currentFrameIndex }) {
-            seekToFrame(index: current)
-        } else if let last = searchResults.last {
-            seekToFrame(index: last) // wrap around
-        }
+        seekToFrame(index: searchResults.last(where: { $0 < currentFrameIndex }) ?? searchResults.last!)
     }
 
-    // MARK: - Day navigation
+    // MARK: - Day nav
 
-    func goToNextDay() {
-        currentDate = Calendar.current.date(byAdding: .day, value: 1, to: currentDate) ?? currentDate
-        clear()
-    }
-
-    func goToPreviousDay() {
-        currentDate = Calendar.current.date(byAdding: .day, value: -1, to: currentDate) ?? currentDate
-        clear()
-    }
-
-    func goToToday() {
-        currentDate = Date()
-        clear()
-    }
+    func goToNextDay() { currentDate = Calendar.current.date(byAdding: .day, value: 1, to: currentDate) ?? currentDate; clear() }
+    func goToPreviousDay() { currentDate = Calendar.current.date(byAdding: .day, value: -1, to: currentDate) ?? currentDate; clear() }
+    func goToToday() { currentDate = Date(); clear() }
 
     // MARK: - Filters
 
-    func toggleAppFilter(_ app: String) {
-        filterApp = filterApp == app ? nil : app
-    }
+    func toggleAppFilter(_ app: String) { filterApp = filterApp == app ? nil : app }
+    func toggleDevice(_ id: String) { activeDeviceId = activeDeviceId == id ? nil : id }
+    func clearFilters() { filterApp = nil; filterDevice = nil; activeDeviceId = nil }
 
-    func toggleDeviceFilter(_ device: String) {
-        filterDevice = filterDevice == device ? nil : device
-    }
+    // MARK: - Meetings & tags
 
-    func toggleSpeakerFilter(_ speaker: String) {
-        filterSpeaker = filterSpeaker == speaker ? nil : speaker
-    }
-
-    func clearFilters() {
-        filterApp = nil
-        filterDevice = nil
-        filterSpeaker = nil
-    }
-
-    // MARK: - Meetings
-
-    func pushMeetings(_ newMeetings: [TLMeeting]) {
-        let existingIds = Set(meetings.map { $0.id })
-        let unique = newMeetings.filter { !existingIds.contains($0.id) }
-        meetings.append(contentsOf: unique)
+    func pushMeetings(_ m: [TLMeeting]) {
+        let ids = Set(meetings.map { $0.id })
+        meetings.append(contentsOf: m.filter { !ids.contains($0.id) })
         meetings.sort { $0.startTime < $1.startTime }
     }
 
-    var meetingsForCurrentDay: [TLMeeting] {
-        meetings.filter { meeting in
-            guard let start = meeting.startDate else { return false }
-            return start >= dayStart && start < dayEnd
-        }
-    }
-
-    // MARK: - Tags
-
-    func pushTags(_ newTags: [TLTag]) {
-        let existingIds = Set(tags.map { $0.id })
-        let unique = newTags.filter { !existingIds.contains($0.id) }
-        tags.append(contentsOf: unique)
+    func pushTags(_ t: [TLTag]) {
+        let ids = Set(tags.map { $0.id })
+        tags.append(contentsOf: t.filter { !ids.contains($0.id) })
     }
 
     func addTag(name: String, color: String?) {
-        guard let start = selectionStart, let end = selectionEnd else { return }
-        let tag = TLTag(
-            id: UUID().uuidString,
-            name: name,
-            color: color,
-            startTime: ISO8601DateFormatter().string(from: start),
-            endTime: ISO8601DateFormatter().string(from: end)
-        )
-        tags.append(tag)
+        guard let s = selectionStart, let e = selectionEnd else { return }
+        tags.append(TLTag(id: UUID().uuidString, name: name, color: color,
+                          startTime: TLDateParser.string(from: s), endTime: TLDateParser.string(from: e)))
     }
 
-    func removeTag(id: String) {
-        tags.removeAll { $0.id == id }
-    }
-
-    var tagsForCurrentDay: [TLTag] {
-        tags.filter { tag in
-            guard let start = tag.startDate else { return false }
-            return start >= dayStart && start < dayEnd
-        }
-    }
-
-    // MARK: - Multi-monitor
-
-    func rebuildDeviceList() {
-        let deviceIds = Set(frames.compactMap { $0.devices.first?.device_id })
-        let existing = Set(devices.map { $0.id })
-        for id in deviceIds where !existing.contains(id) {
-            let name = frames.first(where: { $0.devices.first?.device_id == id })?.devices.first?.device_id ?? id
-            devices.append(TLDeviceInfo(id: id, name: name, kind: "monitor"))
-        }
-    }
-
-    func toggleDevice(_ deviceId: String) {
-        if activeDeviceId == deviceId {
-            activeDeviceId = nil
-        } else {
-            activeDeviceId = deviceId
-        }
-    }
+    func removeTag(id: String) { tags.removeAll { $0.id == id } }
 
     func setTimeRange(start: String, end: String) {
-        rebuildAppGroups()
+        // Could filter frames to range if needed
+    }
+
+    // MARK: - Devices
+
+    private func rebuildDeviceList() {
+        let ids = Set(frames.compactMap { $0.devices.first?.device_id })
+        let existing = Set(devices.map { $0.id })
+        for id in ids where !existing.contains(id) {
+            devices.append(TLDeviceInfo(id: id, name: id, kind: "monitor"))
+        }
     }
 
     func clear() {
-        frames.removeAll()
-        appGroups.removeAll()
-        knownTimestamps.removeAll()
-        currentTimestamp = nil
-        currentFrameId = nil
-        currentFrameIndex = 0
-        isLoading = true
-        searchResults = []
-        meetings.removeAll()
-        clearSelection()
+        frames.removeAll(); appGroups.removeAll(); knownTimestamps.removeAll()
+        currentTimestamp = nil; currentFrameId = nil; currentFrameIndex = 0
+        isLoading = true; searchResults = []; meetings.removeAll(); clearSelection()
     }
 
-    // MARK: - App grouping
+    // MARK: - Grouping
 
     private func rebuildAppGroups() {
         guard !frames.isEmpty else { appGroups = []; return }
-        rebuildDeviceList()
-
         var groups: [TLAppGroup] = []
-        var curApp = ""
-        var curDev = ""
-        var groupStart: Date?
-        var groupEnd: Date?
-        var startIdx = 0
-        var count = 0
-        var hasAudio = false
+        var curApp = "", curDev = ""
+        var groupStart: Date?, groupEnd: Date?
+        var startIdx = 0, count = 0, hasAudio = false
 
         for (i, frame) in frames.enumerated() {
             guard let date = frame.date, let device = frame.devices.first else { continue }
-            let app = device.metadata.app_name
-            let dev = device.device_id
+            let app = device.metadata.app_name, dev = device.device_id
 
             if app == curApp && dev == curDev {
-                groupEnd = date
-                count += 1
+                groupEnd = date; count += 1
                 if !device.audio.isEmpty { hasAudio = true }
             } else {
                 if let s = groupStart, let e = groupEnd, !curApp.isEmpty {
-                    groups.append(TLAppGroup(
-                        id: "\(startIdx)-\(curApp)",
-                        appName: curApp,
-                        deviceId: curDev,
-                        startTime: s,
-                        endTime: e,
-                        frameCount: count,
-                        startIndex: startIdx,
-                        endIndex: i - 1,
-                        hasAudio: hasAudio
-                    ))
+                    groups.append(TLAppGroup(id: "\(startIdx)-\(curApp)", appName: curApp, deviceId: curDev,
+                                             startTime: s, endTime: e, frameCount: count,
+                                             startIndex: startIdx, endIndex: i - 1, hasAudio: hasAudio))
                 }
-                curApp = app
-                curDev = dev
-                groupStart = date
-                groupEnd = date
-                startIdx = i
-                count = 1
-                hasAudio = !device.audio.isEmpty
+                curApp = app; curDev = dev; groupStart = date; groupEnd = date
+                startIdx = i; count = 1; hasAudio = !device.audio.isEmpty
             }
         }
         if let s = groupStart, let e = groupEnd, !curApp.isEmpty {
-            groups.append(TLAppGroup(
-                id: "\(startIdx)-\(curApp)",
-                appName: curApp,
-                deviceId: curDev,
-                startTime: s,
-                endTime: e,
-                frameCount: count,
-                startIndex: startIdx,
-                endIndex: frames.count - 1,
-                hasAudio: hasAudio
-            ))
+            groups.append(TLAppGroup(id: "\(startIdx)-\(curApp)", appName: curApp, deviceId: curDev,
+                                     startTime: s, endTime: e, frameCount: count,
+                                     startIndex: startIdx, endIndex: frames.count - 1, hasAudio: hasAudio))
         }
-
         appGroups = groups
     }
 }
 
-// MARK: - Panel controller
+// MARK: - Panel controller (overlay + embedded modes)
 
 class TimelinePanelController {
     static let shared = TimelinePanelController()
 
+    // Overlay mode
     private var panel: NSPanel?
-    private var hostingView: NSHostingView<TimelineOverlayView>?
-    private var parentWindow: NSWindow?
-    private var observations: [NSObjectProtocol] = []
 
-    var isVisible: Bool {
-        panel?.isVisible ?? false
-    }
+    // Embedded mode
+    private var embeddedHostingView: NSHostingView<TimelineRootView>?
+    private var hostContentView: NSView?
 
-    func create(parentWindowPtr: UInt64) {
-        // Don't recreate if already exists
-        if panel != nil { return }
+    var isVisible: Bool { panel?.isVisible ?? false }
+    var isEmbedded: Bool { embeddedHostingView != nil }
 
+    // MARK: - Overlay mode
+
+    func createOverlay() {
+        guard panel == nil else { return }
         let store = TimelineDataStore.shared
-
-        let contentView = TimelineOverlayView(store: store) { actionJson in
-            gTimelineCallback?(makeCString(actionJson))
+        let view = TimelineOverlayView(store: store) { json in
+            gTimelineCallback?(makeCString(json))
         }
-
-        let hosting = NSHostingView(rootView: contentView)
-        hosting.translatesAutoresizingMaskIntoConstraints = false
+        let hosting = NSHostingView(rootView: view)
 
         let p = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
-            styleMask: [.titled, .closable, .resizable, .fullSizeContentView, NSWindow.StyleMask(rawValue: 128)],
-            backing: .buffered,
-            defer: false
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView,
+                        NSWindow.StyleMask(rawValue: 128)],
+            backing: .buffered, defer: false
         )
-        p.isFloatingPanel = false
-        p.level = .normal
         p.titlebarAppearsTransparent = true
         p.titleVisibility = .hidden
-        p.isMovableByWindowBackground = true
+        p.isMovableByWindowBackground = false // don't eat text selection drags
         p.backgroundColor = .windowBackgroundColor
         p.contentView = hosting
         p.isReleasedWhenClosed = false
         p.minSize = NSSize(width: 600, height: 400)
+        p.center()
+        panel = p
+    }
 
-        // Try to find parent window for positioning
-        if parentWindowPtr != 0 {
-            parentWindow = NSApp.windows.first {
-                UInt64(UInt(bitPattern: Unmanaged.passUnretained($0).toOpaque())) == parentWindowPtr
-            }
+    func showOverlay() { panel?.makeKeyAndOrderFront(nil) }
+    func hideOverlay() { panel?.orderOut(nil) }
+    func toggleOverlay() { isVisible ? hideOverlay() : showOverlay() }
+
+    // MARK: - Embedded mode (inside Tauri window)
+
+    func initEmbedded(windowPtr: UInt64) -> Bool {
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(windowPtr))
+        guard let ptr = ptr else { return false }
+        let window = Unmanaged<NSWindow>.fromOpaque(ptr).takeUnretainedValue()
+        guard let contentView = window.contentView else { return false }
+
+        // Remove existing if re-initing
+        embeddedHostingView?.removeFromSuperview()
+
+        let store = TimelineDataStore.shared
+        let view = TimelineRootView(store: store) { json in
+            gTimelineCallback?(makeCString(json))
         }
+        let hosting = NSHostingView(rootView: view)
+        hosting.translatesAutoresizingMaskIntoConstraints = false
+        hosting.isHidden = true // start hidden, show via updateEmbeddedPosition
 
-        if let pw = parentWindow {
-            let pf = pw.frame
-            p.setFrame(NSRect(
-                x: pf.origin.x + (pf.width - 900) / 2,
-                y: pf.origin.y + (pf.height - 600) / 2,
-                width: 900,
-                height: 600
-            ), display: true)
-        } else {
-            p.center()
-        }
-
-        self.panel = p
-        self.hostingView = hosting
+        contentView.addSubview(hosting)
+        hostContentView = contentView
+        embeddedHostingView = hosting
+        return true
     }
 
-    func show() {
-        panel?.makeKeyAndOrderFront(nil)
+    func updateEmbeddedPosition(x: Double, y: Double, w: Double, h: Double) {
+        guard let hosting = embeddedHostingView, let contentView = hostContentView else { return }
+        let contentHeight = contentView.frame.height
+        let appKitY = contentHeight - (y + h) // flip Y for AppKit coords
+        hosting.frame = NSRect(x: x, y: appKitY, width: w, height: h)
+        hosting.isHidden = false
     }
 
-    func hide() {
-        panel?.orderOut(nil)
+    func hideEmbedded() {
+        embeddedHostingView?.isHidden = true
     }
 
-    func toggle() {
-        if isVisible {
-            hide()
-        } else {
-            show()
-        }
+    func showEmbedded() {
+        embeddedHostingView?.isHidden = false
     }
 
-    func updatePosition(x: Double, y: Double, w: Double, h: Double) {
-        panel?.setFrame(NSRect(x: x, y: y, width: w, height: h), display: true)
-    }
+    // MARK: - Cleanup
 
     func destroy() {
-        for obs in observations {
-            NotificationCenter.default.removeObserver(obs)
-        }
-        observations.removeAll()
-        panel?.orderOut(nil)
-        panel = nil
-        hostingView = nil
-        parentWindow = nil
+        panel?.orderOut(nil); panel = nil
+        embeddedHostingView?.removeFromSuperview(); embeddedHostingView = nil
+        hostContentView = nil
     }
 }

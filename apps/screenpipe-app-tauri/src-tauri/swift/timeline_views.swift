@@ -259,7 +259,7 @@ struct TLScrubber: View {
             // Controls
             controls.frame(height: 18).padding(.horizontal, 8)
         }
-        .gesture(MagnificationGesture().onChanged { v in zoom = max(0.5, min(10, v)) })
+        // Cmd+scroll for zoom (handled via NSEvent monitor instead of gesture to not block scrolling)
     }
 
     // MARK: Time labels

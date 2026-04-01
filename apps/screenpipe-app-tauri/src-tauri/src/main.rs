@@ -946,11 +946,17 @@ async fn main() {
             remote_sync_commands::remote_sync_stop_scheduler,
             remote_sync_commands::remote_sync_scheduler_status,
             commands::set_native_theme,
-            // Native SwiftUI timeline
+            // Native SwiftUI timeline — overlay
             timeline_commands::native_timeline_is_available,
             timeline_commands::native_timeline_init,
             timeline_commands::native_timeline_show,
             timeline_commands::native_timeline_hide,
+            // Native SwiftUI timeline — embedded
+            timeline_commands::native_timeline_init_embedded,
+            timeline_commands::native_timeline_update_position,
+            timeline_commands::native_timeline_show_embedded,
+            timeline_commands::native_timeline_hide_embedded,
+            // Native SwiftUI timeline — data
             timeline_commands::native_timeline_push_frames,
             timeline_commands::native_timeline_set_current_time,
             timeline_commands::native_timeline_destroy,
