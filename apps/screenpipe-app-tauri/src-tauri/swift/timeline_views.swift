@@ -368,6 +368,40 @@ struct TimelineScrubberView: View {
                         .offset(x: x, y: (height / 2) - 2)
                 }
 
+                // Meeting bars (top strip)
+                ForEach(store.meetingsForCurrentDay) { meeting in
+                    if let s = meeting.startDate, let e = meeting.endDate {
+                        let x = totalWidth * (s.timeIntervalSince(store.dayStart) / total)
+                        let w = max(4, totalWidth * (e.timeIntervalSince(s) / total))
+                        VStack(spacing: 0) {
+                            RoundedRectangle(cornerRadius: 1)
+                                .fill(Color.green.opacity(0.4))
+                                .frame(width: w, height: 6)
+                            Spacer()
+                        }
+                        .frame(height: height)
+                        .offset(x: x)
+                        .help("\(meeting.title) (\(meeting.durationMinutes)m)")
+                    }
+                }
+
+                // Tag bars (bottom strip)
+                ForEach(store.tagsForCurrentDay) { tag in
+                    if let s = tag.startDate, let e = tag.endDate {
+                        let x = totalWidth * (s.timeIntervalSince(store.dayStart) / total)
+                        let w = max(4, totalWidth * (e.timeIntervalSince(s) / total))
+                        VStack(spacing: 0) {
+                            Spacer()
+                            RoundedRectangle(cornerRadius: 1)
+                                .fill(tag.swiftColor.opacity(0.5))
+                                .frame(width: w, height: 4)
+                        }
+                        .frame(height: height)
+                        .offset(x: x)
+                        .help(tag.name)
+                    }
+                }
+
                 // Playhead
                 if let ts = store.currentTimestamp {
                     let x = totalWidth * (ts.timeIntervalSince(store.dayStart) / total)
@@ -603,6 +637,114 @@ struct SelectionToolbar: View {
     }
 }
 
+// MARK: - Tag toolbar
+
+struct TagToolbar: View {
+    @ObservedObject var store: TimelineDataStore
+    let onAction: (String) -> Void
+    @State private var customTagName: String = ""
+    @State private var showCustomInput: Bool = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text("tag:")
+                .font(TLBrand.monoFont(size: 9))
+                .foregroundColor(TLBrand.fgTertiary)
+
+            ForEach(store.defaultTagNames, id: \.self) { name in
+                Button(action: {
+                    store.addTag(name: name, color: tagColor(name))
+                    let json = "{\"action\":\"tag_added\",\"name\":\"\(name)\"}"
+                    onAction(json)
+                }) {
+                    Text(name)
+                        .font(TLBrand.monoFont(size: 9))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color(hex: tagColor(name)).opacity(0.15))
+                        .overlay(RoundedRectangle(cornerRadius: 3).stroke(Color(hex: tagColor(name)).opacity(0.4), lineWidth: 0.5))
+                }
+                .buttonStyle(.borderless)
+            }
+
+            if showCustomInput {
+                TextField("custom...", text: $customTagName)
+                    .font(TLBrand.monoFont(size: 9))
+                    .textFieldStyle(.plain)
+                    .frame(width: 80)
+                    .onSubmit {
+                        if !customTagName.isEmpty {
+                            store.addTag(name: customTagName, color: nil)
+                            customTagName = ""
+                            showCustomInput = false
+                        }
+                    }
+            } else {
+                Button(action: { showCustomInput = true }) {
+                    Image(systemName: "plus").font(.system(size: 9))
+                }.buttonStyle(.borderless)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 3)
+        .background(Color.primary.opacity(0.02))
+    }
+
+    private func tagColor(_ name: String) -> String {
+        switch name {
+        case "deep work": return "#3B82F6"
+        case "meeting": return "#10B981"
+        case "admin": return "#F59E0B"
+        case "break": return "#8B5CF6"
+        default: return "#6B7280"
+        }
+    }
+}
+
+// MARK: - Device selector (multi-monitor)
+
+struct DeviceSelectorView: View {
+    @ObservedObject var store: TimelineDataStore
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "display.2")
+                .font(.system(size: 10))
+                .foregroundColor(TLBrand.fgTertiary)
+
+            ForEach(store.devices) { device in
+                Button(action: { store.toggleDevice(device.id) }) {
+                    HStack(spacing: 3) {
+                        Image(systemName: device.kind == "monitor" ? "display" : device.kind == "input" ? "mic" : "speaker.wave.2")
+                            .font(.system(size: 8))
+                        Text(device.name.prefix(20))
+                            .font(TLBrand.monoFont(size: 9))
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(store.activeDeviceId == device.id ? Color.primary.opacity(0.1) : Color.clear)
+                    .overlay(RoundedRectangle(cornerRadius: 3).stroke(
+                        store.activeDeviceId == device.id ? TLBrand.fgSecondary : TLBrand.border,
+                        lineWidth: 0.5
+                    ))
+                }
+                .buttonStyle(.borderless)
+            }
+
+            if store.activeDeviceId != nil {
+                Button(action: { store.activeDeviceId = nil }) {
+                    Text("all")
+                        .font(TLBrand.monoFont(size: 9))
+                        .foregroundColor(TLBrand.fgTertiary)
+                }.buttonStyle(.borderless)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 3)
+    }
+}
+
 // MARK: - Full overlay view
 
 struct TimelineOverlayView: View {
@@ -638,8 +780,18 @@ struct TimelineOverlayView: View {
             // Frame preview
             FramePreviewView(store: store, audioPlayer: audioPlayer)
 
-            // Selection toolbar
+            // Selection toolbar + tag buttons
             SelectionToolbar(store: store, onAction: onAction)
+
+            // Tag toolbar (shown when selection active)
+            if store.hasSelection {
+                TagToolbar(store: store, onAction: onAction)
+            }
+
+            // Device selector (multi-monitor)
+            if store.devices.count > 1 {
+                DeviceSelectorView(store: store)
+            }
 
             Rectangle().fill(TLBrand.border).frame(height: 0.5)
 

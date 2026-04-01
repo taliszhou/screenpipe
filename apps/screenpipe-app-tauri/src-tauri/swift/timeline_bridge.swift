@@ -122,6 +122,28 @@ public func tlDestroy() -> Int32 {
     return 0
 }
 
+@_cdecl("tl_push_meetings")
+public func tlPushMeetings(_ json: UnsafePointer<CChar>) -> Int32 {
+    let str = String(cString: json)
+    guard let data = str.data(using: .utf8) else { return -1 }
+    do {
+        let batch = try JSONDecoder().decode(TLMeetingBatch.self, from: data)
+        DispatchQueue.main.async { TimelineDataStore.shared.pushMeetings(batch.meetings) }
+        return 0
+    } catch { return -1 }
+}
+
+@_cdecl("tl_push_tags")
+public func tlPushTags(_ json: UnsafePointer<CChar>) -> Int32 {
+    let str = String(cString: json)
+    guard let data = str.data(using: .utf8) else { return -1 }
+    do {
+        let batch = try JSONDecoder().decode(TLTagBatch.self, from: data)
+        DispatchQueue.main.async { TimelineDataStore.shared.pushTags(batch.tags) }
+        return 0
+    } catch { return -1 }
+}
+
 @_cdecl("tl_clear")
 public func tlClear() -> Int32 {
     DispatchQueue.main.async {

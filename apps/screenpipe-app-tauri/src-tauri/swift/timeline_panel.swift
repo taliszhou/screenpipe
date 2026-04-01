@@ -44,6 +44,17 @@ class TimelineDataStore: ObservableObject {
     // Day navigation
     @Published var currentDate: Date = Date()
 
+    // Meetings
+    @Published var meetings: [TLMeeting] = []
+
+    // Tags
+    @Published var tags: [TLTag] = []
+    let defaultTagNames = ["deep work", "meeting", "admin", "break"]
+
+    // Multi-monitor
+    @Published var devices: [TLDeviceInfo] = []
+    @Published var activeDeviceId: String? // nil = show all
+
     // Unique values for filter dropdowns
     var uniqueApps: [String] {
         Array(Set(frames.compactMap { $0.devices.first?.metadata.app_name })).sorted()
@@ -244,6 +255,72 @@ class TimelineDataStore: ObservableObject {
         filterSpeaker = nil
     }
 
+    // MARK: - Meetings
+
+    func pushMeetings(_ newMeetings: [TLMeeting]) {
+        let existingIds = Set(meetings.map { $0.id })
+        let unique = newMeetings.filter { !existingIds.contains($0.id) }
+        meetings.append(contentsOf: unique)
+        meetings.sort { $0.startTime < $1.startTime }
+    }
+
+    var meetingsForCurrentDay: [TLMeeting] {
+        meetings.filter { meeting in
+            guard let start = meeting.startDate else { return false }
+            return start >= dayStart && start < dayEnd
+        }
+    }
+
+    // MARK: - Tags
+
+    func pushTags(_ newTags: [TLTag]) {
+        let existingIds = Set(tags.map { $0.id })
+        let unique = newTags.filter { !existingIds.contains($0.id) }
+        tags.append(contentsOf: unique)
+    }
+
+    func addTag(name: String, color: String?) {
+        guard let start = selectionStart, let end = selectionEnd else { return }
+        let tag = TLTag(
+            id: UUID().uuidString,
+            name: name,
+            color: color,
+            startTime: ISO8601DateFormatter().string(from: start),
+            endTime: ISO8601DateFormatter().string(from: end)
+        )
+        tags.append(tag)
+    }
+
+    func removeTag(id: String) {
+        tags.removeAll { $0.id == id }
+    }
+
+    var tagsForCurrentDay: [TLTag] {
+        tags.filter { tag in
+            guard let start = tag.startDate else { return false }
+            return start >= dayStart && start < dayEnd
+        }
+    }
+
+    // MARK: - Multi-monitor
+
+    func rebuildDeviceList() {
+        let deviceIds = Set(frames.compactMap { $0.devices.first?.device_id })
+        let existing = Set(devices.map { $0.id })
+        for id in deviceIds where !existing.contains(id) {
+            let name = frames.first(where: { $0.devices.first?.device_id == id })?.devices.first?.device_id ?? id
+            devices.append(TLDeviceInfo(id: id, name: name, kind: "monitor"))
+        }
+    }
+
+    func toggleDevice(_ deviceId: String) {
+        if activeDeviceId == deviceId {
+            activeDeviceId = nil
+        } else {
+            activeDeviceId = deviceId
+        }
+    }
+
     func setTimeRange(start: String, end: String) {
         rebuildAppGroups()
     }
@@ -257,6 +334,7 @@ class TimelineDataStore: ObservableObject {
         currentFrameIndex = 0
         isLoading = true
         searchResults = []
+        meetings.removeAll()
         clearSelection()
     }
 
@@ -264,6 +342,7 @@ class TimelineDataStore: ObservableObject {
 
     private func rebuildAppGroups() {
         guard !frames.isEmpty else { appGroups = []; return }
+        rebuildDeviceList()
 
         var groups: [TLAppGroup] = []
         var curApp = ""
