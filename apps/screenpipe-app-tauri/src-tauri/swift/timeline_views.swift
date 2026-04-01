@@ -376,33 +376,22 @@ struct TLScrubber: View {
                 }
             }
         }
-        .contentShape(Rectangle())
-        .onContinuousHover { phase in
-            switch phase {
-            case .active(let pt):
-                guard t > 0 else { return }
-                let frac = max(0, min(1, pt.x / (w)))
-                hoverTime = store.dayStart.addingTimeInterval(frac * t)
-                hoverX = pt.x
-            case .ended:
-                hoverTime = nil
+        // Hover tracking via transparent overlay that passes through clicks
+        .overlay(
+            GeometryReader { geo in
+                Color.clear
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case .active(let pt):
+                            guard t > 0 else { return }
+                            hoverTime = store.dayStart.addingTimeInterval(max(0, min(1, pt.x / w)) * t)
+                            hoverX = pt.x
+                        case .ended:
+                            hoverTime = nil
+                        }
+                    }
+                    .allowsHitTesting(false) // don't block scroll
             }
-        }
-        .onTapGesture { location in
-            guard t > 0 else { return }
-            let frac = max(0, min(1, location.x / w))
-            onSeek(store.dayStart.addingTimeInterval(frac * t))
-        }
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 10)
-                .onChanged { v in
-                    guard t > 0, NSEvent.modifierFlags.contains(.shift) else { return }
-                    let frac = max(0, min(1, v.location.x / w))
-                    let time = store.dayStart.addingTimeInterval(frac * t)
-                    if !store.isSelecting { store.startSelection(at: time) }
-                    else { store.updateSelection(to: time) }
-                }
-                .onEnded { _ in if store.isSelecting { store.endSelection() } }
         )
     }
 

@@ -323,10 +323,11 @@ class TimelinePanelController {
             gTimelineCallback?(makeCString(json))
         }
         let hosting = NSHostingView(rootView: view)
-        hosting.translatesAutoresizingMaskIntoConstraints = false
+        hosting.translatesAutoresizingMaskIntoConstraints = true // we set frame manually
+        hosting.frame = NSRect.zero // start at zero size
         hosting.isHidden = true // start hidden, show via updateEmbeddedPosition
 
-        contentView.addSubview(hosting)
+        contentView.addSubview(hosting, positioned: .above, relativeTo: nil)
         hostContentView = contentView
         embeddedHostingView = hosting
         return true
