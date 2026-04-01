@@ -388,16 +388,19 @@ struct TLScrubber: View {
                 hoverTime = nil
             }
         }
-        .gesture(
-            DragGesture(minimumDistance: 0)
+        .onTapGesture { location in
+            guard t > 0 else { return }
+            let frac = max(0, min(1, location.x / w))
+            onSeek(store.dayStart.addingTimeInterval(frac * t))
+        }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 10)
                 .onChanged { v in
-                    guard t > 0 else { return }
+                    guard t > 0, NSEvent.modifierFlags.contains(.shift) else { return }
                     let frac = max(0, min(1, v.location.x / w))
                     let time = store.dayStart.addingTimeInterval(frac * t)
-                    if NSEvent.modifierFlags.contains(.shift) {
-                        if !store.isSelecting { store.startSelection(at: time) }
-                        else { store.updateSelection(to: time) }
-                    } else { onSeek(time) }
+                    if !store.isSelecting { store.startSelection(at: time) }
+                    else { store.updateSelection(to: time) }
                 }
                 .onEnded { _ in if store.isSelecting { store.endSelection() } }
         )

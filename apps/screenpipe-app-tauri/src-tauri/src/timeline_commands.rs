@@ -58,34 +58,39 @@ pub fn native_timeline_hide() -> bool {
 // MARK: - Embedded mode
 
 #[tauri::command]
-pub fn native_timeline_init_embedded(app: tauri::AppHandle) -> Result<bool, String> {
+pub fn native_timeline_init_embedded(app: tauri::AppHandle, window_label: String) -> Result<bool, String> {
     #[cfg(target_os = "macos")]
     {
         use tauri_nspanel::ManagerExt;
-        info!("initializing native timeline embedded");
+        use tauri::Manager;
+        info!("initializing native timeline embedded for window '{}'", window_label);
         native_timeline::set_callback(timeline_callback);
 
-        // Try known window labels to find the main window
-        let labels = ["main", "main-window", "home"];
-        let mut window_ptr = 0u64;
-
-        for label in labels {
-            if let Ok(panel) = app.get_webview_panel(label) {
-                window_ptr = &*panel as *const _ as u64;
-                info!("found window '{}' for embedded timeline", label);
-                break;
+        let window_ptr: u64 = if let Ok(panel) = app.get_webview_panel(&window_label) {
+            &*panel as *const _ as *mut std::ffi::c_void as u64
+        } else if let Some(window) = app.get_webview_window(&window_label) {
+            #[cfg(target_os = "macos")]
+            {
+                use tauri_nspanel::WebviewWindowExt;
+                match window.to_panel() {
+                    Ok(panel) => &*panel as *const _ as *mut std::ffi::c_void as u64,
+                    Err(e) => {
+                        return Err(format!("failed to get panel for '{}': {}", window_label, e));
+                    }
+                }
             }
-        }
+            #[cfg(not(target_os = "macos"))]
+            { 0u64 }
+        } else {
+            return Err(format!("window '{}' not found", window_label));
+        };
 
-        if window_ptr == 0 {
-            return Err("could not find main window for embedded timeline".to_string());
-        }
-
+        info!("embedded timeline window ptr: {}", window_ptr);
         Ok(native_timeline::init_embedded(window_ptr))
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = app;
+        let _ = (app, window_label);
         Ok(false)
     }
 }

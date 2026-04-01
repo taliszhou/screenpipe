@@ -39,7 +39,10 @@ export function NativeTimelineWrapper({ embedded }: { embedded?: boolean }) {
         const available = await nativeTimeline.isAvailable();
         if (cancelled || !available) { setFallback(true); return; }
 
-        const inited = await nativeTimeline.initEmbedded();
+        // Try "home" first, then "main", then "main-window"
+        let inited = await nativeTimeline.initEmbedded("home");
+        if (!inited) inited = await nativeTimeline.initEmbedded("main");
+        if (!inited) inited = await nativeTimeline.initEmbedded("main-window");
         if (cancelled || !inited) { setFallback(true); return; }
 
         // Initial position

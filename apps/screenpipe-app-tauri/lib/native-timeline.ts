@@ -21,7 +21,8 @@ export const nativeTimeline = {
   hide: () => call<boolean>("native_timeline_hide"),
 
   // Embedded (inside Tauri window)
-  initEmbedded: () => call<boolean>("native_timeline_init_embedded"),
+  initEmbedded: (windowLabel?: string) =>
+    call<boolean>("native_timeline_init_embedded", { windowLabel: windowLabel || "home" }),
   updatePosition: (x: number, y: number, w: number, h: number) =>
     call<boolean>("native_timeline_update_position", { x, y, w, h }),
   showEmbedded: () => call<boolean>("native_timeline_show_embedded"),
