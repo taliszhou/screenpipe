@@ -4,114 +4,55 @@
 
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { nativeTimeline } from "@/lib/native-timeline";
 import Timeline from "@/components/rewind/timeline";
 
 /**
- * Wrapper that embeds the native SwiftUI timeline inside the Tauri window.
- * The SwiftUI view is an NSHostingView added as a subview of the Tauri window's
- * contentView, positioned to match this React component's bounds.
+ * When native is available on macOS: shows the SwiftUI timeline overlay panel.
+ * Falls back to the React timeline on other platforms.
  *
- * Falls back to the React timeline on non-macOS or if native init fails.
+ * The native panel is a separate NSPanel that floats on top.
+ * We also mount the React Timeline hidden to keep the WebSocket connected.
  */
 export function NativeTimelineWrapper({ embedded }: { embedded?: boolean }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [nativeReady, setNativeReady] = useState(false);
-  const [fallback, setFallback] = useState(false);
-  const rafRef = useRef<number>();
+  const [useNative, setUseNative] = useState<boolean | null>(null);
 
-  // Update native view position to match our container
-  const syncPosition = useCallback(() => {
-    if (!containerRef.current || !nativeReady) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    // Convert CSS pixels to screen coordinates — devicePixelRatio matters
-    // Tauri webview coordinates already account for DPI, so use rect directly
-    nativeTimeline.updatePosition(rect.x, rect.y, rect.width, rect.height);
-  }, [nativeReady]);
-
-  // Init native embedded view
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
-      try {
-        const available = await nativeTimeline.isAvailable();
-        console.log("[native-timeline] available:", available);
-        if (cancelled || !available) { setFallback(true); return; }
+      const available = await nativeTimeline.isAvailable();
+      if (cancelled || !available) { setUseNative(false); return; }
 
-        // Try window labels in order
-        const labels = ["home", "main", "main-window"];
-        let inited = false;
-        for (const label of labels) {
-          try {
-            const result = await nativeTimeline.initEmbedded(label);
-            console.log(`[native-timeline] initEmbedded("${label}"):`, result);
-            if (result) { inited = true; break; }
-          } catch (e) {
-            console.log(`[native-timeline] initEmbedded("${label}") error:`, e);
-          }
-        }
-        if (cancelled || !inited) {
-          console.log("[native-timeline] falling back to React timeline");
-          setFallback(true); return;
-        }
+      // Init the overlay panel
+      const inited = await nativeTimeline.init();
+      if (cancelled || !inited) { setUseNative(false); return; }
 
-        // Initial position
-        if (containerRef.current) {
-          const rect = containerRef.current.getBoundingClientRect();
-          await nativeTimeline.updatePosition(rect.x, rect.y, rect.width, rect.height);
-        }
-
-        await nativeTimeline.showEmbedded();
-        if (cancelled) return;
-        setNativeReady(true);
-      } catch {
-        if (!cancelled) setFallback(true);
-      }
+      await nativeTimeline.show();
+      if (!cancelled) setUseNative(true);
     })();
 
     return () => {
       cancelled = true;
-      nativeTimeline.hideEmbedded().catch(() => {});
+      nativeTimeline.hide().catch(() => {});
     };
   }, []);
 
-  // Keep position synced on resize/scroll
-  useEffect(() => {
-    if (!nativeReady) return;
-
-    const observer = new ResizeObserver(() => syncPosition());
-    if (containerRef.current) observer.observe(containerRef.current);
-
-    // Also sync on window resize and scroll
-    const onResize = () => syncPosition();
-    window.addEventListener("resize", onResize);
-    window.addEventListener("scroll", onResize, true);
-
-    // Initial sync
-    syncPosition();
-
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", onResize);
-      window.removeEventListener("scroll", onResize, true);
-    };
-  }, [nativeReady, syncPosition]);
-
-  if (fallback) {
+  // Fallback
+  if (useNative === false) {
     return <Timeline embedded={embedded} />;
   }
 
-  // Render a transparent placeholder that the native view sits on top of.
-  // Also render the React Timeline hidden to keep the WebSocket connected
-  // and forwarding frames to the native side.
+  // Native is active or still checking — keep React Timeline hidden for WebSocket data
   return (
-    <>
-      <div ref={containerRef} className="h-full w-full" />
+    <div className="h-full w-full flex items-center justify-center">
+      {useNative === null && (
+        <span className="text-xs text-muted-foreground font-mono">loading native timeline...</span>
+      )}
       <div className="sr-only">
         <Timeline embedded={embedded} />
       </div>
-    </>
+    </div>
   );
 }
