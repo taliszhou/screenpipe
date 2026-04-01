@@ -72,8 +72,14 @@ class TimelineDataStore: ObservableObject {
         }
     }
 
+    func seekRelative(seconds: Double) {
+        guard let current = currentTimestamp else { return }
+        let newTime = current.addingTimeInterval(seconds)
+        let iso = ISO8601DateFormatter().string(from: newTime)
+        setCurrentTime(iso)
+    }
+
     func setTimeRange(start: String, end: String) {
-        // Could filter frames to range, for now just rebuild
         rebuildAppGroups()
     }
 
