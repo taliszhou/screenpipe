@@ -37,13 +37,25 @@ export function NativeTimelineWrapper({ embedded }: { embedded?: boolean }) {
     (async () => {
       try {
         const available = await nativeTimeline.isAvailable();
+        console.log("[native-timeline] available:", available);
         if (cancelled || !available) { setFallback(true); return; }
 
-        // Try "home" first, then "main", then "main-window"
-        let inited = await nativeTimeline.initEmbedded("home");
-        if (!inited) inited = await nativeTimeline.initEmbedded("main");
-        if (!inited) inited = await nativeTimeline.initEmbedded("main-window");
-        if (cancelled || !inited) { setFallback(true); return; }
+        // Try window labels in order
+        const labels = ["home", "main", "main-window"];
+        let inited = false;
+        for (const label of labels) {
+          try {
+            const result = await nativeTimeline.initEmbedded(label);
+            console.log(`[native-timeline] initEmbedded("${label}"):`, result);
+            if (result) { inited = true; break; }
+          } catch (e) {
+            console.log(`[native-timeline] initEmbedded("${label}") error:`, e);
+          }
+        }
+        if (cancelled || !inited) {
+          console.log("[native-timeline] falling back to React timeline");
+          setFallback(true); return;
+        }
 
         // Initial position
         if (containerRef.current) {

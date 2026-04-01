@@ -238,28 +238,27 @@ struct TLDayNav: View {
 struct TLScrubber: View {
     @ObservedObject var store: TimelineDataStore
     let onSeek: (Date) -> Void
-    @State private var zoom: CGFloat = 1.0
     @State private var hoveredGroup: String?
     @State private var hoverTime: Date?
     @State private var hoverX: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 0) {
-            // Time labels
-            GeometryReader { g in labels(g.size.width * zoom) }.frame(height: 14)
-
-            // Bars
+            // Time labels + bars — always show full day, no scroll needed
             GeometryReader { g in
-                ScrollView(.horizontal, showsIndicators: true) {
-                    bars(g.size.width * zoom, g.size.height)
-                        .frame(width: g.size.width * zoom, height: g.size.height)
+                let w = g.size.width
+                let h = g.size.height
+                ZStack(alignment: .top) {
+                    // Time labels at top
+                    labels(w).frame(height: 14)
+                    // Bars below
+                    bars(w, h - 14).offset(y: 14)
                 }
-            }.frame(height: 52)
+            }.frame(height: 66)
 
             // Controls
             controls.frame(height: 18).padding(.horizontal, 8)
         }
-        // Cmd+scroll for zoom (handled via NSEvent monitor instead of gesture to not block scrolling)
     }
 
     // MARK: Time labels
@@ -402,19 +401,9 @@ struct TLScrubber: View {
                 Text(TLTimeFmt.hms(ts)).font(B.mono(10, .medium)).foregroundColor(B.fg1)
             }
             Spacer()
-            zoomBtn("minus.magnifyingglass") { zoom = max(0.5, zoom - 0.5) }
-            Text("\(Int(zoom * 100))%").font(B.mono(9)).foregroundColor(B.fg3).frame(width: 36)
-            zoomBtn("plus.magnifyingglass") { zoom = min(10, zoom + 0.5) }
-            Divider().frame(height: 10)
             if store.isLoading { ProgressView().scaleEffect(0.35).frame(width: 10, height: 10) }
-            Text("\(store.frames.count)").font(B.mono(9)).foregroundColor(B.fg3)
+            Text("\(store.frames.count) frames").font(B.mono(9)).foregroundColor(B.fg3)
         }
-    }
-
-    private func zoomBtn(_ icon: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon).font(.system(size: 10)).frame(width: 18, height: 18).contentShape(Rectangle())
-        }.buttonStyle(.plain).foregroundColor(B.fg2)
     }
 
     private func hours() -> [Date] {
