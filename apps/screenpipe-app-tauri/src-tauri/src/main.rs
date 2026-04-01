@@ -103,6 +103,8 @@ mod health;
 mod log_files;
 mod native_notification;
 mod native_shortcut_reminder;
+mod native_timeline;
+mod timeline_commands;
 mod safe_icon;
 mod shortcuts;
 mod vault;
@@ -944,6 +946,14 @@ async fn main() {
             remote_sync_commands::remote_sync_stop_scheduler,
             remote_sync_commands::remote_sync_scheduler_status,
             commands::set_native_theme,
+            // Native SwiftUI timeline
+            timeline_commands::native_timeline_is_available,
+            timeline_commands::native_timeline_init,
+            timeline_commands::native_timeline_show,
+            timeline_commands::native_timeline_hide,
+            timeline_commands::native_timeline_push_frames,
+            timeline_commands::native_timeline_set_current_time,
+            timeline_commands::native_timeline_destroy,
         ])
         .setup(move |app| {
             //deep link register_all

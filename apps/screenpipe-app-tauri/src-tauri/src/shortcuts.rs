@@ -157,6 +157,41 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
             let app = &app_for_closure;
             info!("show shortcut triggered - attempting to show/hide main overlay");
             let _ = app.emit("shortcut-show", ());
+
+            // Try native SwiftUI timeline first (macOS only)
+            #[cfg(target_os = "macos")]
+            {
+                use crate::native_timeline;
+                use std::sync::atomic::{AtomicBool, Ordering};
+                static NATIVE_INITED: AtomicBool = AtomicBool::new(false);
+                static NATIVE_VISIBLE: AtomicBool = AtomicBool::new(false);
+
+                if native_timeline::is_available() {
+                    if !NATIVE_INITED.load(Ordering::Relaxed) {
+                        extern "C" fn timeline_cb(json: *const std::os::raw::c_char) {
+                            if json.is_null() { return; }
+                            let s = unsafe { std::ffi::CStr::from_ptr(json).to_string_lossy().into_owned() };
+                            tracing::debug!("native timeline action: {}", s);
+                        }
+                        native_timeline::set_callback(timeline_cb);
+                        native_timeline::init_panel(0);
+                        NATIVE_INITED.store(true, Ordering::Relaxed);
+                    }
+
+                    if NATIVE_VISIBLE.load(Ordering::Relaxed) {
+                        info!("hiding native timeline");
+                        native_timeline::hide();
+                        NATIVE_VISIBLE.store(false, Ordering::Relaxed);
+                    } else {
+                        info!("showing native timeline");
+                        native_timeline::show();
+                        NATIVE_VISIBLE.store(true, Ordering::Relaxed);
+                    }
+                    return;
+                }
+            }
+
+            // Fallback: show webview overlay
             {
                 use crate::store::SettingsStore;
                 use crate::window::main_label_for_mode;

@@ -55,6 +55,7 @@ import { SpeakersSection } from "@/components/settings/speakers-section";
 // HomeStatsBadge is rendered inside SummaryCards (chat empty state)
 import { StandaloneChat } from "@/components/standalone-chat";
 import Timeline from "@/components/rewind/timeline";
+import { NativeTimelineWrapper } from "@/components/rewind/native-timeline-wrapper";
 import { useQueryState } from "nuqs";
 import { emit, listen } from "@tauri-apps/api/event";
 import { useSettings } from "@/lib/hooks/use-settings";
@@ -328,7 +329,7 @@ function SettingsPageContent() {
       case "home":
         return <StandaloneChat className="h-full" />;
       case "timeline":
-        return <Timeline embedded />;
+        return <NativeTimelineWrapper embedded />;
       case "pipes":
         return <PipeStoreView />;
       case "help":

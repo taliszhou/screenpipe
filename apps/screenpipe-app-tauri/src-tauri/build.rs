@@ -356,6 +356,9 @@ fn main() {
 
         // Build SwiftUI shortcut reminder
         build_shortcut_reminder();
+
+        // Build native SwiftUI timeline
+        build_timeline();
     }
 
     // Copy mlx.metallib to a known location so Tauri can bundle it as a resource.
@@ -518,4 +521,139 @@ int shortcut_is_available(void) { return 0; }
 
     println!("cargo:rustc-link-search=native={}", out_dir.display());
     println!("cargo:rustc-link-lib=static=shortcut_reminder");
+}
+
+/// Compile native SwiftUI timeline into a static library.
+#[cfg(target_os = "macos")]
+fn build_timeline() {
+    use std::path::PathBuf;
+    use std::process::Command;
+
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    let swift_sources = [
+        PathBuf::from("swift/timeline_bridge.swift"),
+        PathBuf::from("swift/timeline_models.swift"),
+        PathBuf::from("swift/timeline_views.swift"),
+        PathBuf::from("swift/timeline_panel.swift"),
+    ];
+    let lib_path = out_dir.join("libtimeline_bridge.a");
+
+    for src in &swift_sources {
+        println!("cargo:rerun-if-changed={}", src.display());
+    }
+
+    for src in &swift_sources {
+        if !src.exists() {
+            println!(
+                "cargo:warning={} not found, building timeline stub",
+                src.display()
+            );
+            build_timeline_stub(&out_dir, &lib_path);
+            return;
+        }
+    }
+
+    let sdk_path = Command::new("xcrun")
+        .args(["--sdk", "macosx", "--show-sdk-path"])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+
+    let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+    let swift_target = if target_arch == "x86_64" {
+        "x86_64-apple-macos13.0"
+    } else {
+        "arm64-apple-macos13.0"
+    };
+
+    let mut cmd = Command::new("swiftc");
+    cmd.args([
+        "-emit-library",
+        "-static",
+        "-module-name",
+        "TimelineBridge",
+        "-swift-version",
+        "5",
+        "-sdk",
+        &sdk_path,
+        "-target",
+        swift_target,
+        "-O",
+        "-whole-module-optimization",
+        "-o",
+    ]);
+    cmd.arg(&lib_path);
+    for src in &swift_sources {
+        cmd.arg(src);
+    }
+
+    let output = cmd.output().expect("failed to run swiftc for timeline");
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        println!(
+            "cargo:warning=swiftc failed for timeline: {}",
+            stderr.chars().take(500).collect::<String>()
+        );
+        build_timeline_stub(&out_dir, &lib_path);
+        return;
+    }
+
+    println!("cargo:rustc-link-search=native={}", out_dir.display());
+    println!("cargo:rustc-link-lib=static=timeline_bridge");
+    println!("cargo:rustc-link-arg=-Wl,-weak_framework,SwiftUI");
+}
+
+#[cfg(target_os = "macos")]
+fn build_timeline_stub(out_dir: &std::path::Path, lib_path: &std::path::Path) {
+    use std::process::Command;
+
+    let stub_src = out_dir.join("timeline_stub.c");
+    std::fs::write(
+        &stub_src,
+        r#"// Stub: native timeline not available
+#include <stdint.h>
+int32_t tl_is_available(void) { return -2; }
+int32_t tl_init(uint64_t w) { return -2; }
+int32_t tl_push_frames(const char *j) { return -2; }
+int32_t tl_set_time_range(const char *s, const char *e) { return -2; }
+int32_t tl_set_current_time(const char *t) { return -2; }
+void    tl_set_callback(void *cb) {}
+int32_t tl_show(void) { return -2; }
+int32_t tl_hide(void) { return -2; }
+int32_t tl_update_position(double x, double y, double w, double h) { return -2; }
+int32_t tl_destroy(void) { return -2; }
+int32_t tl_clear(void) { return -2; }
+void    tl_free_string(char *p) {}
+"#,
+    )
+    .expect("failed to write timeline stub");
+
+    let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+    let cc_arch = if target_arch == "x86_64" {
+        "x86_64"
+    } else {
+        "arm64"
+    };
+    let status = Command::new("cc")
+        .args(["-c", "-arch", cc_arch, "-o"])
+        .arg(out_dir.join("timeline_stub.o").to_str().unwrap())
+        .arg(stub_src.to_str().unwrap())
+        .status()
+        .expect("failed to compile timeline stub");
+    assert!(status.success(), "timeline stub compilation failed");
+
+    let status = Command::new("ar")
+        .args(["rcs"])
+        .arg(lib_path)
+        .arg(out_dir.join("timeline_stub.o").to_str().unwrap())
+        .status()
+        .expect("failed to create timeline stub archive");
+    assert!(status.success(), "timeline stub archive failed");
+
+    println!("cargo:rustc-link-search=native={}", out_dir.display());
+    println!("cargo:rustc-link-lib=static=timeline_bridge");
 }

@@ -7,6 +7,7 @@ import { StreamTimeSeriesResponse } from "@/components/rewind/timeline";
 import { hasFramesForDate } from "../actions/has-frames-date";
 import { subDays } from "date-fns";
 import { saveFramesToCache, loadCachedFrames } from "./use-timeline-cache";
+import { nativeTimeline } from "@/lib/native-timeline";
 
 // Frame buffer for batching updates - reduces 68 re-renders to ~3-5
 let frameBuffer: StreamTimeSeriesResponse[] = [];
@@ -311,6 +312,9 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 				lastFlushTimestamp: Date.now(),
 			};
 		});
+
+		// Forward frames to native SwiftUI timeline (fire-and-forget)
+		nativeTimeline.pushFrames(JSON.stringify({ frames: framesToFlush })).catch(() => {});
 	},
 
 	connectWebSocket: () => {
