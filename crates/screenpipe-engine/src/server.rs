@@ -600,6 +600,15 @@ impl SCServer {
             .route(
                 "/audio/retranscribe",
                 axum::routing::post(crate::routes::retranscribe::retranscribe_handler),
+            )
+            // External file processing endpoints (for aimemkb knowledge base ingestion)
+            .route(
+                "/external/ocr",
+                axum::routing::post(crate::routes::external::ocr_handler),
+            )
+            .route(
+                "/external/transcribe",
+                axum::routing::post(crate::routes::external::transcribe_handler),
             );
 
         // Apple Intelligence — generic OpenAI-compatible endpoint (macOS only)
